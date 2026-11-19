@@ -168,6 +168,11 @@ duty = "额度历史曲线：留点 / 回血检测（`new_cycle`）/ 去抖 / �
 cli = "无（被 `pool_accounts.py` 调）"
 
 [[module]]
+name = "warmup.py"
+duty = "窗口登记：`window_of_row` / `register` / `window_running` / `due` —— 判「该不该 warm」（magpie `F28` 的**判据**，不移植节拍）；登记表 `gates/diag/warm-window.json`（派生、可重建），**零请求、零定时器**"
+cli = "`python -X utf8 tools/pool/warmup.py`（子命令 due / warm / register / status）"
+
+[[module]]
 name = "registry.py"
 duty = "租约账：`reserve` / `release` / `list_reservations` / `is_dead`，落在**主树** `gates/diag/pool-registry.json`"
 cli = "`wb_registry.py`、`wb_dispatch`"

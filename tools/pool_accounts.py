@@ -18,7 +18,9 @@
 
 ★ 账本写入只有一处例外：`saved_refresh_failed()`（卡 A335 —— **供应商拒绝刷新**才打吊销标记，
   其余一律一个字节都不写）；`probe` **也写** —— 只写 `[account.health]` 的 `state` /
-  `consecutive_failures` / `last_probe` 三键（卡 E121），别的一个字节都不写。
+  `consecutive_failures` / `last_probe` 三键（卡 E121）；卡 A370 起再写 `[account.quota]` 的
+  `resets_at` / `span_s` 两键（**只在探测行带着它们时**，口径见 `record_probe_result()`），
+  别的一个字节都不写。
 """
 
 from __future__ import annotations
@@ -236,6 +238,7 @@ def _check_account(
     # 缺键仍是「未观测」。
     if isinstance(quota, dict):
         _check_used_percent(where, quota.get("used_percent"))
+        _check_window_keys(where, quota)
 
 
 def _check_used_percent(where: str, percent: object) -> None:
@@ -261,6 +264,78 @@ def _check_used_percent(where: str, percent: object) -> None:
             f"{where} 的 [account.quota].used_percent={percent!r} 越界"
             "（必须在 [0, 100]：0 会让整窗估算除以零，>100 会估出比整窗还大的数）"
         )
+
+
+def _check_window_keys(where: str, quota: object) -> None:
+    """`[account.quota]` 的窗口两键（`resets_at` / `span_s`）的**唯一**校验（卡 A370）。
+
+    与 `_check_used_percent()` 同款：**写前全校验**（`load_ledger()` 与 `record_probe_result()`
+    都走这里），越界就抛 `LedgerError` 且账本一个字节都不落地。
+
+    ★ 两键**缺一不可、也不许单写**：只写一个不是「部分观测」，是「这一对数坏了」——
+      `warmup.window_of_row()` 见一个缺一个就回 None（不许兜底 5 小时），账本里留半个键
+      只会让下一个人以为「已经有窗口了」。两个都不写 = 未观测，合法。
+    ★ `span_s` 必须是 **> 0 的有限数**（跨度是窗口的长度，0 或负数不是一个窗口；
+      `bool` 不是数）。`resets_at` 必须是能被 `pool_quota.parse_reset()` 解析的串 ——
+      解析真源只有那一份，这里不写第二份正则。
+    """
+    if not isinstance(quota, dict):
+        return
+    has_reset = "resets_at" in quota
+    has_span = "span_s" in quota
+    if not has_reset and not has_span:
+        return
+    if has_reset != has_span:
+        missing = "span_s" if has_reset else "resets_at"
+        raise LedgerError(
+            f"{where} 的 [account.quota] 只有窗口两键中的一个（缺 {missing}）"
+            " —— 要么两个都给，要么都不给（只给一个等于把窗口口径弄坏了）"
+        )
+    raw_reset = quota.get("resets_at")
+    span = quota.get("span_s")
+    if not isinstance(raw_reset, str) or _parse_reset_strict(raw_reset) is None:
+        raise LedgerError(
+            f"{where} 的 [account.quota].resets_at={raw_reset!r} 解析不出重置时刻"
+            "（要 ISO-8601 或 `YYYY-MM-DD HH:MM:SS UTC+N` 的形状）"
+        )
+    if isinstance(span, bool) or not isinstance(span, (int, float)):
+        raise LedgerError(
+            f"{where} 的 [account.quota].span_s={span!r} 不是数"
+            "（要么整个省掉表示「未观测」，要么填 > 0 的秒数）"
+        )
+    if not math.isfinite(span) or span <= 0:
+        raise LedgerError(
+            f"{where} 的 [account.quota].span_s={span!r} 不是一个窗口的跨度"
+            "（必须 > 0 且有限：跨度只许来自 platforms.toml 的 window_hours）"
+        )
+
+
+def _carries_ledger_window(row: dict) -> bool:
+    """这一行是不是在声明**账本窗口两键**（卡 A370 落地修正）。
+
+    ★ 为什么不能只看 resets_at in row：曲线（tools/pool/quota_history.py）的入参形状里
+      也有一个叫 resets_at 的键，但它是 **unix 秒整数**、跨度键叫 span（不是 span_s）——
+      那是**另一份契约**（point_of() 的窗口字典），不是账本的窗口两键。账本的 resets_at
+      按 _check_window_keys() 的口径必须是**可解析的串**。两个形状共用了一个键名，
+      所以判据按**值的形状**分家：
+        · span_s 在 ⇒ 在声明账本窗口（不管 resets_at 是什么形状，都交给校验去抛）；
+        · 否则只有 resets_at 是**串**才当账本窗口（半个键 ⇒ 抛）；
+        · 否则（缺席 / 数字 ⇒ 曲线那一侧的入参）⇒ 不是账本窗口，不写也不校验。
+    """
+    return "span_s" in row or isinstance(row.get("resets_at"), str)
+
+
+def _parse_reset_strict(raw: str) -> datetime | None:
+    """重置时刻**只走** `pool_quota.parse_reset()`（全仓唯一真源，卡 201）。
+
+    懒加载同 `_ck()`：落地桩只拷部分 tools 文件，顶层 import 会让整套炸成
+    ModuleNotFoundError。
+    """
+    try:
+        import pool_quota as mod  # noqa: PLC0415 —— 懒加载，见 docstring
+    except ImportError:  # pragma: no cover —— 以包形式 import 时
+        from tools import pool_quota as mod  # type: ignore[no-redef]
+    return mod.parse_reset(raw)
 
 
 def _approved_models_from_whitelist() -> set[str] | None:
@@ -958,6 +1033,52 @@ def _extract_amount(obj) -> float | None:
     return None
 
 
+def _value_at_path(obj, path: str) -> object:
+    """按点分路径取值，取不到就 None（`_amount_at_path` 的通用版，卡 A370 用）。
+
+    和 `_amount_at_path()` 同一条路：空段 / 中途不是 dict ⇒ None。区别只在**不要求末值
+    是数** —— 重置时刻是**字符串**（`"2026-11-19T17:00:00+08:00"`），不是数。
+    """
+    cur = obj
+    for part in path.split("."):
+        if not part:
+            return None
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+def _window_of_payload(body: object, plat: dict) -> dict:
+    """从响应里取窗口两键（`resets_at` / `span_s`）；取不出就空 dict（卡 A370）。
+
+    ★ 只有 `platforms.toml` **显式给了** `reset_path`（响应里重置时刻的 JSON 路径）**且**
+      这个平台的 `window_hours`（窗口跨度小时）**都**齐、**都**解析得出来时才回两键。
+      缺一个 = 这个平台「不知道窗口口径」⇒ 空 dict ⇒ 探测行不带两键 ⇒ 账本不写
+      （`windows_of_row()` 那侧见一个缺一个就回 None，绝不兜底 5 小时）。
+    ★ 重置时刻的解析只走 `pool_quota.parse_reset()`（唯一真源）；这里不写正则。
+    ★ 这里**不发请求、不读钟**：只把调用方已经拿到的响应体翻成两键。
+    """
+    reset_path = str(plat.get("reset_path") or "").strip()
+    if not reset_path:
+        return {}
+    raw_reset = _value_at_path(body, reset_path)
+    if not isinstance(raw_reset, str) or not raw_reset.strip():
+        return {}
+    resets_at = _parse_reset_strict(raw_reset)
+    if resets_at is None:
+        return {}
+    hours = plat.get("window_hours")
+    if isinstance(hours, bool) or not isinstance(hours, (int, float)):
+        return {}
+    if not math.isfinite(hours) or hours <= 0:
+        return {}
+    return {
+        "resets_at": _iso(resets_at),
+        "span_s": int(round(float(hours) * 3600)),
+    }
+
+
 def _codearts_credential(plat: dict):
     """从 `token_env` 取 AK/SK —— 返回 `(CodeArtsCredential, 缺凭据时该点名的名字)`。
 
@@ -1122,6 +1243,9 @@ def probe_account(acc: dict, plat: dict, fetch=None, offline: bool = False) -> d
         "amount": amount,
         "unit": str(plat.get("unit", plat.get("quota_unit", ""))),
         "detail": f"读自 {url}",
+        # 窗口两键只在平台表给了口径**且**响应里取得出来时才出现（卡 A370）；
+        # 取不出就不带这两个键 ⇒ `record_probe_result()` 不写不删。
+        **_window_of_payload(body, plat),
     }
 
 
@@ -1241,6 +1365,11 @@ def record_probe_result(
       `save_ledger()` 的 `SAMPLES_CAP` 截。六结论码原样落账，一条都不许压平。
     ★ `source == "unknown"` 的读数带 `amount` ⇒ 拒写并抛 `LedgerError`（照 `_check_account()` 的
       「没探测过就不许填数」）—— 这种情况下**一个字节都不写**，先全量校验再动手。
+    ★ 窗口两键 `resets_at` / `span_s`（卡 A370）的口径与 `used_percent` 三条**逐字同款**：
+      `kind == "ok"` **且**行里带着它们时才写；缺 ⇒ 不写、**也不删**旧值（缺键 = 未观测）；
+      不编默认值（**绝不**在没读到的时候拿「5 小时」凑一个）；写前走 `_check_window_keys()`
+      （与读账本同一份判据），越界就抛 `LedgerError` 且账本不落地。
+      ★ 两键**同进同出**：行里只带一个 ⇒ 抛（半个键不是「部分观测」，是口径坏了）。
     """
     stamp = _iso(now if now is not None else _now())
     by_id: dict[str, dict] = {}
@@ -1266,6 +1395,11 @@ def record_probe_result(
             )
         if row.get("kind") == "ok" and "used_percent" in row:
             _check_used_percent(f"账号 {acc.get('id')}", row.get("used_percent"))
+        if row.get("kind") == "ok" and _carries_ledger_window(row):
+            _check_window_keys(
+                f"账号 {acc.get('id')}",
+                {"resets_at": row.get("resets_at"), "span_s": row.get("span_s")},
+            )
 
     touched = False
     for acc in accounts:
@@ -1282,6 +1416,11 @@ def record_probe_result(
         # 只有「真读到百分比」的 ok 行才写它；其余结论不写也不删 —— 旧值仍是上一次的真读数。
         if row.get("kind") == "ok" and "used_percent" in row:
             quota["used_percent"] = row["used_percent"]
+        # 窗口两键（卡 A370）：只在 ok 行**同时**带着它们时写，缺就一个都不动（旧值保留）。
+        # 写到 [account.quota]，不写顶层 —— 与上面 used_percent 同一个容器、同一条口径。
+        if row.get("kind") == "ok" and "resets_at" in row and "span_s" in row:
+            quota["resets_at"] = row["resets_at"]
+            quota["span_s"] = row["span_s"]
         # 健康态三键的唯一写点（卡 E121 判据 2）；逐键写，绝不整块替换（会冲掉 revoked）。
         touched = _apply_probe_health(acc, row["kind"], stamp) or touched
 

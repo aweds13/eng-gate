@@ -1443,3 +1443,172 @@ def test_cli_list_does_not_truncate_verdict(patched, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "健康 unknown" in out, out      # 不是「健康 unkn」
     assert "连败 12" in out, out
+
+
+# ------------------------------------- ㉖ 窗口两键：探 → 登记（卡 A370）
+
+
+WINDOW_PLAT = {
+    "probe": "http",
+    "probe_url": "https://example.invalid",
+    "base_urls": ["https://example.invalid"],
+    "token_env": "TF_DEMO_TOKEN",
+    "amount_path": "data.quota.remaining",
+    "reset_path": "data.quota.resetsAt",
+    "window_hours": 5,
+}
+
+WINDOW_BODY = {
+    "data": {"quota": {"remaining": 8, "resetsAt": "2026-11-19T17:00:00+08:00"}},
+}
+
+
+def test_probe_ok_row_registers_window_keys(patched, monkeypatch):
+    """㉖a 平台表给了 `reset_path` + `window_hours`、响应里也取得出 ⇒
+    ok 行带 `resets_at` / `span_s`，`record_probe_result()` 把它们写进 `[account.quota]`；
+    写前全校验（半个键 / 0 跨度 / 解析不出的时刻 ⇒ `LedgerError`，账本一个字节不变）。
+    """
+    monkeypatch.setenv("TF_DEMO_TOKEN", "t")
+    out = pa.probe_account(_acc("workbuddy"), dict(WINDOW_PLAT),
+                           fetch=lambda u, t: (200, WINDOW_BODY, ""))
+    assert out["kind"] == "ok"
+    assert out["resets_at"] == "2026-11-19T17:00:00+08:00"
+    assert out["span_s"] == 5 * 3600
+
+    # 账本里这个号叫 `wb-1`（`_acc()` 造的是 `workbuddy-1`）；落盘那一侧只认账本里的 id。
+    out["id"] = "wb-1"
+    stamp_now = datetime(2026, 11, 19, 12, 0, 0, tzinfo=pa.TZ)
+    before = pa.load_ledger(patched)
+    pa.record_probe_result(patched, before, [out], now=stamp_now)
+    quota = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["quota"]
+    assert quota["resets_at"] == "2026-11-19T17:00:00+08:00"
+    assert quota["span_s"] == 5 * 3600
+
+    # 解析只许走 `pool_quota.parse_reset()`（唯一真源）—— 它不是只认 ISO-8601：
+    # 报错文案里的 `YYYY-MM-DD HH:MM:SS UTC+N` 形状也必须认，且落盘统一成 +08:00。
+    utc_row = {
+        "id": "wb-1",
+        "platform": "workbuddy",
+        "kind": "ok",
+        "amount": 7,
+        "resets_at": "2026-11-19 17:00:00 UTC+8",
+        "span_s": 5 * 3600,
+    }
+    pa.record_probe_result(patched, pa.load_ledger(patched), [utc_row], now=stamp_now)
+    quota = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["quota"]
+    assert pa._parse_reset_strict(quota["resets_at"]) == datetime(
+        2026, 11, 19, 17, 0, 0, tzinfo=pa.TZ
+    )
+
+    # ★ 硬边界：与 used_percent 同款「写前全校验」—— 坏的一对必须抛，且账本一个字节不变。
+    raw = patched.read_bytes()
+    bad_rows = [
+        {"resets_at": "2026-11-19T17:00:00+08:00"},
+        {"resets_at": "2026-11-19T17:00:00+08:00", "span_s": 0},
+        {"resets_at": "不是时刻", "span_s": 3600},
+    ]
+    for bad in bad_rows:
+        row = {"id": "wb-1", "platform": "workbuddy", "kind": "ok", "amount": 7, **bad}
+        with pytest.raises(pa.LedgerError):
+            pa.record_probe_result(patched, pa.load_ledger(patched), [row], now=stamp_now)
+        assert patched.read_bytes() == raw, bad
+
+
+def test_curve_window_shape_is_not_the_ledger_window(patched):
+    """㊖2 曲线那一侧的入参形状（`resets_at` 是 unix 秒整数 + `span`）不是账本窗口两键：
+    照旧记账、不抛、不写账本。
+
+    ★ 现场（卡 A370 落地门禁）：全量 pytest 红在
+      `tests/test_pool_quota_history.py::test_record_probe_result_notes_a_drawable_window`——
+      那条铉子给 `record_probe_result()`的行里 `resets_at` 是 **int**（给曲线用），
+      而 `_check_window_keys()`把它当成账本窗口去解析字符串 ⇒ `LedgerError`。
+    同一个键名两份契约，只能按**值的形状**分家（`_carries_ledger_window()`）。
+    """
+    stamp_now = datetime(2026, 11, 19, 12, 0, 0, tzinfo=pa.TZ)
+    at = int(stamp_now.timestamp())
+    before = patched.read_bytes()
+    pa.record_probe_result(
+        patched,
+        pa.load_ledger(patched),
+        [
+            {
+                "id": "wb-1",
+                "platform": "workbuddy",
+                "kind": "ok",
+                "used": 40.0,
+                "resets_at": at + 3600,
+                "span": 86400,
+            }
+        ],
+        now=stamp_now,
+    )
+    assert patched.read_bytes() != before  # 账本那一笔照落（samples / observed_at）
+    quota = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["quota"]
+    assert "resets_at" not in quota and "span_s" not in quota
+
+    # 反向：同样是 int，但行里带了 `span_s` ⇒ 就是在声明账本窗口，必须抛。
+    with pytest.raises(pa.LedgerError):
+        pa.record_probe_result(
+            patched,
+            pa.load_ledger(patched),
+            [{"id": "wb-1", "kind": "ok", "resets_at": at + 3600, "span_s": 3600}],
+            now=stamp_now,
+        )
+
+
+def test_probe_without_window_keys_keeps_old_values(patched, monkeypatch):
+    """㉖b 这一轮没带两键 ⇒ **不写也不删**，旧值逐字保留（缺键才叫「未观测」）。"""
+    stamp_now = datetime(2026, 11, 19, 12, 0, 0, tzinfo=pa.TZ)
+    pa.record_probe_result(
+        patched,
+        pa.load_ledger(patched),
+        [
+            {
+                "id": "wb-1",
+                "platform": "workbuddy",
+                "kind": "ok",
+                "amount": 7,
+                "resets_at": "2026-11-19T17:00:00+08:00",
+                "span_s": 5 * 3600,
+            }
+        ],
+        now=stamp_now,
+    )
+    seeded = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["quota"]
+    assert seeded["resets_at"] == "2026-11-19T17:00:00+08:00"
+    assert seeded["span_s"] == 5 * 3600
+
+    # 五结论码逐条来「碰」：一个都不许把旧窗口删掉（照 used_percent 那条口径）
+    for kind in ("uncertain", "skipped", "failed", "not-supported", "unknown-platform"):
+        pa.record_probe_result(
+            patched,
+            pa.load_ledger(patched),
+            [{"id": "wb-1", "platform": "workbuddy", "kind": kind, "detail": "x"}],
+            now=stamp_now,
+        )
+        kept = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["quota"]
+        assert kept["resets_at"] == "2026-11-19T17:00:00+08:00", kind
+        assert kept["span_s"] == 5 * 3600, kind
+
+
+def test_platform_without_reset_path_never_writes_window(patched, monkeypatch):
+    """㉖c 没写 `reset_path` 的平台（含 `probe = "manual"`）⇒ 两键**一个都不出现**。"""
+    monkeypatch.setenv("TF_DEMO_TOKEN", "t")
+    # ① http 平台但表里没给 reset_path：响应里就算有像重置时刻的键也不许猜
+    bare = {k: v for k, v in WINDOW_PLAT.items() if k not in ("reset_path", "window_hours")}
+    out = pa.probe_account(_acc("workbuddy"), bare, fetch=lambda u, t: (200, WINDOW_BODY, ""))
+    assert out["kind"] == "ok"
+    assert "resets_at" not in out and "span_s" not in out
+
+    # ② manual 平台：连探测都不探，自然也没有窗口两键
+    manual = pa.probe_account(_acc("lobsterai"), pa.load_platforms()["lobsterai"])
+    assert manual["kind"] == "uncertain"
+    assert "resets_at" not in manual and "span_s" not in manual
+
+    # ③ 落盘那一侧：把这两行真的写进去，账本里也仍然没有这两键
+    stamp_now = datetime(2026, 11, 19, 12, 0, 0, tzinfo=pa.TZ)
+    pa.record_probe_result(patched, pa.load_ledger(patched), [out], now=stamp_now)
+    quota = {a["id"]: a for a in pa.load_ledger(patched)["account"]}["wb-1"]["quota"]
+    assert "resets_at" not in quota and "span_s" not in quota
+    raw = patched.read_text(encoding="utf-8")
+    assert "resets_at" not in raw and "span_s" not in raw

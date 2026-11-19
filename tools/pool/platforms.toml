@@ -18,10 +18,24 @@
 #   * 表里这些平台大多是 IDE / 面板的凭据，没有公开的 chat 补全入口，所以现在**全是空的**；
 #   * 填之前必须真机验证过（`verified = true` 且写明 `source`），
 #     否则填了也仍算 `verified = false`，网关不认。
+#
+# 各段可选的两个窗口键（卡 A370 —— magpie F28 只移植「判据」，不移植「节拍」）：
+#   * `reset_path`：这个平台的**只读额度响应**里，重置时刻所在的点分 JSON 路径
+#     （形状同 `amount_path`，例如 `"data.quota.resetsAt"`）；
+#   * `window_hours`：这个平台窗口的跨度（**小时**，可以是小数，例如 `5`）；
+#   两个键**同进同出**：只写一个 = 等于没写（`_window_of_payload()` 两个都得齐、都得
+#   解析得出来才回两键；缺一个就一个字都不落账本）。
+#   ★ **都没写 = 不知道**，不是「默认 5 小时」：`warmup.py due` 对这样的平台一律判
+#     `unknown` 并把理由写出来。跨度只许来自这里 —— 代码里不许有「5 小时」的兜底常量
+#     （设计稿点名禁止的那条：凭印象定节拍比不定更糟）。
+#   ★ 今天**一个平台都没填**这两个键：`gates/diag/repos/ref/` 的四份参考实现里没有
+#     任何「5 小时窗口」字段（workbuddy 的 `CycleStartTime`/`CycleEndTime` 是计费周期，
+#     qoder 的 `qoderUsage.expiresAt` 是积分到期日，codearts 的周期字段被参考实现置空），
+#     所以没有「真读得到」的重置时刻可写。等哪天真机读到，再按实测填，并写清 `source`。
 
 [meta]
 schema = 1
-updated_at = "2026-11-09"
+updated_at = "2026-11-19"
 note = "端点与坑来自 gates/diag/repos/ref/ 的五个参考仓存档；本机只有 codearts / codebuddy 有真号。"
 
 # ---------------------------------------------------------------- codearts（华为云码道）

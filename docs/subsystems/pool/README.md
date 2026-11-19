@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 46 个 py（45 个模块 + `__init__.py`）、**20742 行**（`wc -l tools/pool/*.py`，2026-11-19 现算）。
+`tools/pool/` = 47 个 py（46 个模块 + `__init__.py`）、**21297 行**（`wc -l tools/pool/*.py`，2026-11-20 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -46,7 +46,7 @@
 | `no_window.py` | 29 | 起子进程「不弹窗」的 `CREATE_NO_WINDOW` 常量 —— 全仓唯一真源 | 无（被十几个入口 import） |
 | `outcomes.py` | 175 | 按**请求**而不是按轮算结局（magpie `Totals.count()` 移植）：`is_failed` / `is_outcome` / `request_of` / `count_requests`；只读账本，不改一个字节 | 无（被 `wb_dispatch` 的 `append_usage_line` / `usage_summary` 调） |
 | `plan.py` | 680 | 队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（`wb_plan.py` 的逻辑层，拒绝会冲突的组合） | `wb_plan.py`、`wb_batch.py` |
-| `platforms.toml` | 246 | 平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`；`probe` 三个取值 http / manual / codearts-credits（后一个是签名读一次 statistics/plugin 的真读） | 无（被 `pool_accounts.py` 读） |
+| `platforms.toml` | 260 | 平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`；`probe` 三个取值 http / manual / codearts-credits（后一个是签名读一次 statistics/plugin 的真读） | 无（被 `pool_accounts.py` 读） |
 | `pricing.py` | 231 | 定价算术（十进制位移 / 严格大于分档 / 整单按档 / 1 小时缓存写 2×）；**零价目表**，`Price` 一律由调用方构造；`unpriced_calls()` 与账本的 `unpriced()` 仍是两份读数，互不调用 | 无（纯函数；今天零生产调用方） |
 | `projects.py` | 223 | 项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内 | `wb_project.py` |
 | `queue.py` | 412 | 落地合并队列：单写者段排队 + 投机预检（`gates/diag/merge-queue.json`）；投机结果**不许复用** | 无（被 `pool.landing` 调） |
@@ -66,6 +66,7 @@
 | `task.py` | 1611 | 任务栅栏：批预声明 → 每张卡交成送申请 → 集齐才收口；含自旋锁与逐卡域检查 | `wb_task.py`、`auto_land.py` |
 | `trae_dispatch.py` | 380 | 面板道（CDP 驱动 Trae）进账：一次跑落成租约 + 日志 + 判决；**刻意不接进派活** | 本文件即入口；`wb_watch.py` |
 | `usage_ingest.py` | 658 | 外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账） | 无 |
+| `warmup.py` | 555 | 窗口登记：`window_of_row` / `register` / `window_running` / `due` —— 判「该不该 warm」（magpie `F28` 的**判据**，不移植节拍）；登记表 `gates/diag/warm-window.json`（派生、可重建），**零请求、零定时器** | `python -X utf8 tools/pool/warmup.py`（子命令 due / warm / register / status） |
 
 两张**账**分开住，这是理解本子系统的关键：
 
@@ -80,12 +81,12 @@
 > 账号账**故意在仓外**：只存凭据指针（`~/.codeartsdoer/pool.env` 之类），不存凭据本身；
 > 没有 git 兜底，所以写入一律原子替换，删号打墓碑（`tools/pool_accounts.py` 的 `save_ledger()`）。
 
-## 2. 度量（2026-11-19 现算）
+## 2. 度量（2026-11-20 现算）
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **20742 行** / **46 个文件**（45 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 398 张（384 done / 14 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **21297 行** / **47 个文件**（46 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 398 张（385 done / 13 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

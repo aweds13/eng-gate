@@ -41,6 +41,11 @@
 - 新增 `tools/pool/limits.example.toml`（50 行全注释 + 一条注释掉的样例）：给读者一个能进 git、能被 `load_limits` 真读的体例范本；生产读的是仓外那份，本文件里不许出现会真拦人的限额。
 - 新增 `tests/test_pool_limits_data.py` 11 条：位址逐字相等且不随 cwd 变 / 两份 reader 吃同一份文件 / 旧形状在改过那一侧必须抛 / `accounts` 键在 docstring 与错误文案里被点名 / 文件不存在回空表 / 坏 TOML 抛且 `LimitError` / 示例文件真读不抛 / 上限边界照旧。
 - `tools/pool/limits.py` 一行未改：变异 M3 证明它仍必须是「吞成 `{}`」那一侧，两份 reader 不许合并。
+## 2026-11-19 T-AG655 F28 窗口登记：本仓要的不是按点启窗，是把窗口登记下来
+- 新增 `tools/pool/warmup.py`（555 行）：`window_of_row` / `register`/ `window_running` / `due` + 子命令 due / warm / register / status；状态只写 `gates/diag/warm-window.json`，不装定时器、不发 HTTP、不读钟（`--now` 注入）。
+- `tools/pool_accounts.py`（1980→2104）加两处取数（`_value_at_path` / `_window_of_payload`）与两处校验（`_check_window_keys` / `_parse_reset_strict`），`probe_account()` 与 `record_probe_result()` 三处接线；既有键语义一字未动。另加一个分家判据 `_carries_ledger_window()`：曲线那一侧的 `resets_at`（unix 秒整数）不当账本窗口。
+- `tools/pool/platforms.toml` 加 `reset_path` / `window_hours` 两键的口径注释（同进同出、缺一不落账、没有兜底常量），今天九个平台都没填；`docs/subsystems/pool/modules.toml` 登记 `tools/pool/warmup.py` 一条职责。
+- 新增 `tests/test_pool_warmup.py` 28 条 + `tests/test_pool_accounts.py` 4 条：窗口两键必须成对、跨度不许默认、同日同刻幂等、due 只回三值、CLI 未知必退 3。
 ## 2026-11-18 T-AG646 队列短锁等不到就无锁写：改成失败关闭、两处 os.replace 有界重试
 - 两条同族实现（gate_pool.PoolQueue.locked 与 pool/queue.py::_locked）的「等满等待窗口就 break 出去照样读改写」取消：到期仍建不出锁 ⇒ 抛自家 GatePoolBusy / QueueBusy，一个字节都不写（推翻卡 E55 的「记账队列不许变成闸」；实测 timeout=0.0 下 12 线程并发 submit 只剩 1 行）。
 - 建锁的 PermissionError 与 FileExistsError 走同一条「等 → 到期 → 失败关闭」：Windows 上持有者正在 unlink() 的那一瞬撞的就是 PermissionError，锁文件 churn 3 秒实测 2.46%；建锁后把 pid@host 写进锁文件，等不到时点名「等了 Ns」+ 锁路径 + 持有者（读不到就明说读不到）。

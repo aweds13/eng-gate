@@ -12592,3 +12592,20 @@ evidence = [
   "test:test_pool_limits_data.py::test_missing_file_is_empty_not_refuse",
 ]
 gaps = "1. 判据 1 的「位址唯一」只钉了算出来的路径，没钉「仓外那份文件今天不存在」这件事本身：`limits.limits_path()` 回仓外那份 limits.toml（与 accounts.toml 同目录，路径由 pool_dir 现算；该文件今天 exists=False） ⇒ 生产仍空转，这是裁决 ① 的正常态而非缺陷。指针 tools/pool/limits.py2. 缺口 3 的 `assert_serving()` 仍零生产调用方，本卡按裁决 ④ 不接；它若将来接线，会与 `wb_dispatch.py:3600-3602` 的「读不懂 ⇒ 拒派」撞同一档判据，归属未定。指针 tools/pool/limits_policy.py3. 形状裁决 (b) 让 `load_limits()` 的返回成了 `{账号: 段} ∪ {「accounts」: {「models」}}` 的混合体；今天只有 `pool.limits.load_limits()` 会读到它，但 F34（A341）将来若改成另取一个入口，这个混合体就成了第二处投影。指针 docs/subsystems/pool/modules.toml"
+
+[entries."T-AG655"]
+id = "T-AG655"
+title = "F28窗口登记：判据移植、节拍不移植；两键同进同出、缺就说不知道"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/warmup.py",
+  "file:tools/pool_accounts.py",
+  "file:tests/test_pool_warmup.py",
+  "text:tools/pool/warmup.py::def window_of_row(row: Mapping[str, object]) -> Window | None:",
+  "text:tools/pool/warmup.py::def register(rows: Sequence[Mapping[str, object]], *, now: datetime, root: Path = ROOT) -> Path:",
+  "test:test_pool_warmup.py::test_window_of_row_never_defaults_the_span",
+  "test:test_pool_warmup.py::test_same_epoch_same_day_is_idempotent",
+  "test:test_pool_warmup.py::test_due_verdicts_are_only_the_three",
+]
+gaps = "1. `tools/pool/platforms.toml` 的窗口两键今天**一个平台都没填**：`gates/diag/repos/ref/` 四份参考实现里没有「5 小时窗口」字段（workbuddy 的 `CycleStartTime`/`CycleEndTime` 是计费周期、qoder 的 `qoderUsage.expiresAt` 是积分到期日），所以 `tools/pool/warmup.py due` 对真账本恒回 `unknown` —— 这是「判不出就说判不出」的正确读数，不是缺陷。指针 `tools/pool/platforms.toml`- 判据 1 的状态文件（`gates/diag/` 下的派生 json，与 quota-state.json 同款、受 `.gitignore` 忽略）今天还不存在：只有真跑 `register` 才落盘，所以「唯一写点」只能靠测试里的两个临时根证明；它不进 files、不进提交。指针 `tools/pool/warmup.py`3. 「按点启窗」这条腿本仓明文不做：`tools/pool/warmup.py` 不装定时器、不发请求，节拍由主控在外部挂；判据 6 用 ast 咬住这条，但「谁在外部挂」今天没有归属卡。指针 `docs/subsystems/pool/modules.toml`"
