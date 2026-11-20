@@ -3,6 +3,11 @@
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。
 - tests/test_gha_cloud_gate.py 14 → 26 条（片区全是新判据：骨架禁 engineering 四字面、第二仓禁三键、未知仓退 2、require_text/workflow.install 正反面、all 在新 dest 上不被挡）。
 - 文书 docs/subsystems/ci/GitHub-Actions-云门禁.md 的 §3/§5/§8 重写：§8 从「真读数在但不是这份脚本造的」改成「每仓一份 profile」。
+## 2026-11-21 T-AG681 云门禁唯一红门：把「宿主机绝对路径」判据换成位址规则
+
+- tests/test_pool_limits_data.py：判据 1 从「逐字等于本机绝对路径」改成「钉规则」—— 隔离根有 infra/pool/ 时位址 = 该目录下的 limits.toml、没有时回落 TOOL_ROOT 下的同路径，尾段恒为 POOL_ANCHOR + LIMITS_NAME，与 cwd 和盘符都无关（卡 E148）。
+- 反向实验：把 limits_path() 的第三段临时改成写死仓外绝对路径 ⇒ 新判据立刻红（AssertionError 原文见卡规格），还原后 sha256 与基线一致。
+- 卡 A367 规格判据 1 一节加注「已被卡 E148 改写」，保留原文不动（历史口径不静默改写）；生产代码一行未改。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

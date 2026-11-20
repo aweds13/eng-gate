@@ -90,6 +90,8 @@ pool.limits_policy.load_limits(p) -> RAISED LimitError 账号 accounts 的段里
 
 **怎么证明**：新增 tests/test_pool_limits_data.py（计划建）::test_limits_path_is_the_one_we_document —— 不设 env 时 `limits_path()` 的返回值**逐字等于**卡规格里写的那条路径；再加一条 `test_pool_dir_does_not_follow_cwd` 的对照（体例照抄 `tests/test_pool_callers.py:278-289`：换 cwd 后结果不变）。
 
+> **已被卡 E148（台账号 `T-AG681`，2026-11-21）改写**：「逐字等于本机绝对路径」这条口径把**宿主机的盘符与目录名**写成了规矩 —— GHA runner 上检出在别的盘，同一份仓必然红（实测原文 `assert WindowsPath('D:/a/eng-gate/infra/pool/limits.toml') == WindowsPath('D:/repo/infra/pool/limits.toml')`）。现改为钉**规则**：不设 `TF_POOL_LIMITS` 时位址 = `TOOL_ROOT` 逐级向上找到的 `infra/pool/`（找不到则回落 `TOOL_ROOT` 下同路径）+ `limits.toml`，尾段恒为 `infra/pool/limits.toml`；用隔离根（`tmp_path` 自建 `infra/pool/`）证明，与 cwd、盘符无关。上面「数据文件位址」那条**裁决本身没变**（生产仍读仓外那份，代码一行未动），变的只是这条测试的**证明方式**。
+
 ### 判据 2 · 两份 reader 的顶层形状裁决（缺口 2）
 
 择 (a)/(b)/(c) 之一写进卡规格；被改的那一侧必须附一句「为什么这样改不会松开判据」。

@@ -1,0 +1,10 @@
+[entries."T-AG681"]
+id = "T-AG681"
+title = "宿主机绑定判据改成位址规则"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_limits_data.py",
+]
+gaps = "1. 判据 1 现在钉的是规则（隔离根里自建 infra/pool/、以及没有 infra/pool/ 时的回落），没有再断言「本机真实位址」—— 「今天这台机器的号池目录恰好是 D:/repo/infra/pool」这件事不再有测试看着。它是环境事实、不是规矩，但换机器后「读的是不是人以为的那份」要靠人肉确认一次（limits.limits_path() 实跑）。指针 tools/pool/limits.py2. 同一个「宿主机绝对路径」形状在别处还有：tests/test_ci_portability.py 的 R2 白名单是刻意保留的（它测的就是「这批字面还在」），本卡没动；docs/subsystems/pool/README.md 与 modules.toml 里那条路径是生成器产物，改生成器才有效。指针 tests/test_ci_portability.py3. 本卡只在卡树与本机验证，GHA 上那一趟要等下一次把 engineering 快照推上 eng-gate 才有新读数 —— 判据 4 的「GHA 不再靠这条红」本轮是推理 + 本机复现（隔离根模拟别的盘），不是 runner 实跑。指针 gates/enggate-logs/win-136403301980.log"
+

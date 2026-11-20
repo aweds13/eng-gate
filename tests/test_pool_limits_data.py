@@ -2,9 +2,11 @@ r"""卡 A367 / T-AG652：`limits.toml` 的**数据面** —— 位址唯一、�
 
 判据（卡规格「判据」一节）
 
-1. **数据文件位址唯一且被钉住** —— 不设 `TF_POOL_LIMITS` 时 `limits_path()` 落在卡规格写的
-   那条路径上（`D:/repo/infra/pool/limits.toml`）；再加一条对照：换 cwd 不改结果
-   （体例 `tests/test_pool_callers.py` 的 `test_pool_dir_does_not_follow_cwd`）。
+1. **数据文件位址唯一且被钉住** —— 不设 `TF_POOL_LIMITS` 时 `limits_path()` 落在**规则算出的
+   那条路径**上（`TF_POOL_LIMITS` 覆盖 > `TOOL_ROOT` 逐级向上找到的 `infra/pool/` > `TOOL_ROOT` 下同
+   路径）；钉的是规则，不是某个盘符（卡 E148 改的正是这一条：A367 当时钉本机绝对路径，换机器必红）。
+   再加一条对照：换 cwd 不改结果（体例 `tests/test_pool_callers.py` 的
+   `test_pool_dir_does_not_follow_cwd`）。
 2. **两份 reader 的顶层形状**（形状裁决 (b)）—— 同一份临时 `limits.toml`：限额段留顶层
    （`[[<id>.limit]]`），`[accounts."<id>"]` 只放 `models`。两边都能读、语义都对；
    **反向**：把裁决 (a) 那个形状（`limit` 写进 `[accounts."<id>"]`）写回文件，被改的那一侧
@@ -36,9 +38,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from pool import limits, limits_check, limits_policy  # noqa: E402
 
-#: 卡规格逐字写下的那条路径（判据 1）。`str(Path)` 在 Windows 上是反斜杠形态，
-#: 所以「逐字」比对走 `as_posix()`，真钉子仍是 `Path` 对象相等。
-DOCUMENTED = "D:/repo/infra/pool/limits.toml"
+#: 判据 1 的位址**尾段**（卡 E148）：真源是 `pool.limits` 自己的两个常量，不是某个盘符。
+#: 卡 A367 当时钉的是本机绝对路径（`D:/repo/infra/pool/limits.toml`）—— 那只是这条
+#: 规则**在这台机器上的一个实例**，同一份仓换个检出位置就必然红（GHA runner 上实测红过）。
+DOCUMENTED_TAIL = (*limits.POOL_ANCHOR, limits.LIMITS_NAME)
 #: 仓内**模板**（不是生产读的那份）：判据 4 的「真文件」是它。
 TEMPLATE = ROOT / "tools" / "pool" / "limits.example.toml"
 #: 判据 3③ 用；不靠真实钟表（与 `tests/test_pool_limits.py` 同一个写法）。
@@ -91,12 +94,35 @@ def _run(twd, monkeypatch, capsys, *extra):
 # ================================================================ 判据 1：位址
 
 
-def test_limits_path_is_the_one_we_document(monkeypatch) -> None:
-    """不设 env 时 `limits_path()` 就是卡规格写的那条路径 —— 位址只有一处真源。"""
+def test_limits_path_is_the_one_we_document(tmp_path, monkeypatch) -> None:
+    """不设 env 时 `limits_path()` 走的是**规则**：位址只有一处真源，而真源不是某个盘符。
+
+    卡 E148：A367 当时断言的是本机绝对路径（`D:/repo/infra/pool/limits.toml`），
+    那只是同一条规则在这台机器上的实例 —— GHA runner 上检出在别的盘就必然红（实测红过）。
+    这里改用隔离根把**规则**钉住：号池目录在哪由 `TOOL_ROOT` 逐级向上找，尾段恒为
+    `infra/pool/limits.toml`；两段口径（向上找到的目录 + 文件名 == 回落路径）必须一致。
+    """
     monkeypatch.delenv(limits.LIMITS_ENV, raising=False)
+    # ① 隔离根里**有** infra/pool/ ⇒ 位址落在它下面（与 cwd、盘符都无关）。
+    root = tmp_path / "checkout"
+    (root / "infra" / "pool").mkdir(parents=True)
+    monkeypatch.setattr(limits, "TOOL_ROOT", root)
     got = limits.limits_path()
-    assert got == pathlib.Path(DOCUMENTED)
-    assert got.as_posix() == DOCUMENTED
+    assert not pathlib.PurePath(*DOCUMENTED_TAIL).is_absolute()  # 尾段是相对形态，不含盘符
+    assert got == root.joinpath(*DOCUMENTED_TAIL)
+    assert got.parts[-len(DOCUMENTED_TAIL):] == DOCUMENTED_TAIL
+    assert got == limits.pool_dir(start=root).joinpath(limits.LIMITS_NAME)
+    # 换一个盘符/目录名只改前缀，不改尾段 —— 同一份仓搬到别处，读的仍是号池目录下的那份。
+    other = tmp_path / "another" / "checkout"
+    (other / "infra" / "pool").mkdir(parents=True)
+    monkeypatch.setattr(limits, "TOOL_ROOT", other)
+    assert limits.limits_path() == other.joinpath(*DOCUMENTED_TAIL)
+    # ② 隔离根里**没有** infra/pool/ ⇒ 回落到 `TOOL_ROOT` 下的同路径（第三段也要有证明）。
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    monkeypatch.setattr(limits, "TOOL_ROOT", bare)
+    assert limits.pool_dir() is None
+    assert limits.limits_path() == bare.joinpath(*DOCUMENTED_TAIL)
 
 
 def test_pool_dir_does_not_follow_cwd(tmp_path, monkeypatch) -> None:
