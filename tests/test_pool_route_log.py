@@ -8,7 +8,11 @@ r"""路由回放（`tools/pool/route_log.py`，卡 A363 · T-F39）的测试。
 而 `wb_dispatch` 的 429 三拍**真的会换模型**，真实尝试顺序是一条只有它自己知道的信息。
 
 magpie 的解法（`internal/gateway/trace.go` 包注释）不是事后读日志重算，而是**在做决定的
-地方、用做决定时的那几个值**记一条，事后不重算。这九条钉子钉的就是「不许退回到重算」。
+地方、用做决定时的那几个值**记一条，事后不重算。这十条钉子钉的就是「不许退回到重算」。
+
+最后一条（`test_row_shape_is_exactly_eight_keys`）是**卡 A382 / F48** 追加的：行形状是**闭集**，
+会话维度不在里面 —— 那是**决定**（没有一个可信的会话来源之前加这个键，就是逼下游拿空串当真值），
+不是欠账。
 
 | 钉子 | 钉哪一位 |
 |---|---|
@@ -21,6 +25,7 @@ magpie 的解法（`internal/gateway/trace.go` 包注释）不是事后读日志
 | `test_missing_file_is_empty_not_error` | 文件不在 ⇒ `([], 0)`，不是错误 |
 | `test_broken_line_is_reported` | 坏行跳过但**如实计数**，不许静默当空 |
 | `test_status_vocabulary_closed` | `status` 四个值的闭集，第五个必须抛 |
+| `test_row_shape_is_exactly_eight_keys` | 行形状恰好八键，且**没有**会话维度（F48 / 卡 A382） |
 
 ★ 一律用 `--root` / `root=` 指临时目录 —— **不往真的 `gates/diag/` 里写**。
 """
@@ -269,3 +274,36 @@ def test_status_vocabulary_closed(env: Path) -> None:
     assert bad == 0
     assert [row["status"] for row in rows] == list(route_log.STATUSES), "四次合法的各落一条"
     assert "succeeded" not in {row["status"] for row in rows}, "第五个值居然落盘了"
+
+
+# ================================================================ ⑩ 行形状闭集（卡 A382 / F48）
+
+
+def test_row_shape_is_exactly_eight_keys(env: Path) -> None:
+    """行的形状**恰好八键**，且**没有**会话维度 —— 这是闭集钉，不是欠账单。
+
+    ★ 为什么不是 `xfail(strict=True)` 闹钟：闭集是**阳性**断言 —— 哪天有人加 `"session"`
+      键，它当场红，含义明确（「改了形状就回来改这份规格」）。写成 xfail 会把一条**决定**
+      读成一条**欠账**，而且 strict 的 XPASS 只有跑全量时才看得见。
+
+    ★ 为什么今天**不该**有会话键：`tools/pool/route_log.py` 的 docstring 写死了本模块的边界 ——
+      「每个参数都是**调用方传进来的事实**，本模块不读别的账、不重算、不排序」。会话维度若进来
+      只能由调用方传；而网关今天不认任何会话头（F48 判据 1）。**在没有一个可信来源之前加这个键，
+      就是逼下游拿空串当真值** —— 正是 F48 要禁的那件事。
+    """
+    keys = ["asked", "at", "attempt", "card", "served", "started_at", "status", "tried"]
+    forbidden = {"session", "caller", "conversation", "session_id", "conversation_id"}
+
+    _dispatch(env, tried=[{"model": M1, "fail": ""}], served=M1)
+    rows, bad = route_log.read_routes(CARD, root=env)
+
+    assert bad == 0, "好记录不该被算坏行"
+    assert len(rows) == 1, f"该恰好一条，实际 {len(rows)} 条"
+    assert sorted(rows[0]) == keys, (
+        f"行形状变了：{sorted(rows[0])}；规格写死的八键是 {keys} —— "
+        f"要加键先改这份钉子和 docs/subsystems/pool/事后判据清单.md，三处一起改"
+    )
+    assert forbidden & set(rows[0]) == set(), (
+        f"行里出现了会话维度的键：{sorted(forbidden & set(rows[0]))} —— "
+        f"没有一个可信的会话来源之前不许加"
+    )

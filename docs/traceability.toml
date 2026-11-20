@@ -12741,3 +12741,19 @@ evidence = [
   "test:test_pool_gateway.py::test_search_protocol_stops_at_the_first_non_refusal",
 ]
 gaps = "1. 搜索腿今天没有 HTTP 入口：只做出 route_once(protocol=PROTOCOL_SEARCH) 的注入形态，gateway 的四个 PATHS 一个都没加 ⇒ 现在从网络面还调不到搜索 key 轮换。指针 tools/pool/gateway.py2. key 身份只有 8 字节 hex（sha256[:16]）⇒ 碰撞面比全长摘要大；只用于识别同一个 key，不当凭据也不写进日志。指针 tools/pool_quota.py3. tavily 的 429 带 Retry-After: 3600 会被 SEARCH_RATE_MAX_S=600 夹到 600 —— 厂商说的停放时长与本仓上界不一致，取本仓上界。指针 tools/pool_quota.py"
+
+[entries."T-AG670"]
+id = "T-AG670"
+title = "F48会话身份：只认宿主注入的指纹绝不编id"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_session_identity.py",
+  "file:tests/test_pool_route_log.py",
+  "file:tests/test_wb_dispatch.py",
+  "test:test_pool_session_identity.py::test_session_id_derives_nothing",
+  "test:test_pool_session_identity.py::test_gateway_never_hashes_or_derives_identity",
+  "test:test_pool_session_identity.py::test_post_body_keys_carry_no_identity",
+  "test:test_pool_session_identity.py::test_gateway_inbound_headers_are_exactly_four",
+]
+gaps = "1. 会话维度只钉在「不许编」这一半：网关入站头是闭集、route_log 行恰好八键、`--resume auto` 没会话文件就退 2 —— 但「同一个会话跨轮次怎么归属到同一条读」仍没有实现，归属仍靠调用方自己保管。指针 tools/wb_session.py2. 指纹只认宿主注入的 `DSH_SESSION_ID`，本仓没有第二来源；宿主不注入时放行且**不写租约账本** —— 于是「这是一次工人口径的派活」只能从账本缺失反推，没有正面的标记位。指针 tools/wb_dispatch.py3. 三份判据文件里有两条是**既有文件追加**的（`tests/test_pool_route_log.py` 加第九/第十条钉子、`tests/test_wb_dispatch.py` 加一条），这两份文件的主人是 A363 与派活链，不是本卡。指针 tests/test_pool_route_log.py"

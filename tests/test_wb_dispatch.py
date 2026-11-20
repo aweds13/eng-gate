@@ -4261,3 +4261,36 @@ def test_absent_disabled_table_changes_nothing(sandbox: Path, tmp_path: Path,
     assert wd.main() == 0
     capsys.readouterr()
     assert record, "没有禁用表就该照常派活（否则这把闸变成了「全拒」）"
+
+# ================================================ 卡 A382（T-AG670）F48：缺会话文件不编 id
+
+
+def test_resume_auto_without_session_file_refuses_instead_of_inventing_one(
+        sandbox: Path, monkeypatch, capsys) -> None:
+    """★ F48 第一条禁令：`--resume auto` 拿不到会话文件 ⇒ **退 2**，且不替你造一个 id。
+
+    现场 = `test_resume_does_not_overwrite_first_round_evidence` 那份夹具，**只把写
+    `wb-001.session.txt` 那一行删掉**。锚点原文（`tools/wb_dispatch.py`）：
+    `if not resume_sid:` → 打一行 `[FAIL] --resume auto 但没找到会话文件：{side}`
+    → `return 2`。
+
+    ★ 为什么这条值当钉：`grep -rn "没找到会话文件" tests/` 今天零命中 —— 没有任何用例钉这条
+      退 2。而「兜底编一个 id」正是 magpie F48 明令禁止的那件事：猜错就会把两个人的对话混在
+      一起（`../_ext/_magpie_features.md:418`）。
+    """
+    diag = _diag(sandbox)
+    side = diag / "wb-001.session.txt"
+    assert not side.exists(), "现场前提：会话文件**不在**（否则这条用例测的是续跑，不是拒绝）"
+
+    def runner(cmd, log_k, errlog, **kwargs):          # noqa: ANN001, ANN202
+        raise AssertionError("不该起工人：没会话文件必须当场退 2")
+
+    monkeypatch.setattr(wd, "run_worker", runner)
+    monkeypatch.setattr(sys, "argv", ["wb_dispatch.py", "--card", "001", "--spec", "spec.md",
+                                      "--execute", "--resume", "auto"])
+
+    assert wd.main() == 2, "没找到会话文件必须退 2（不是 0、不是 1）"
+    err = capsys.readouterr().err
+    assert "没找到会话文件" in err, err
+    assert not side.exists(), "★ 不许替你造一个会话文件 —— 没有指纹就是没有"
+
