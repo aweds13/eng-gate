@@ -28,6 +28,7 @@ r"""号池网关（`tools/pool/gateway.py`，卡 E94 · T-AG603）的测试 —�
 | `test_chat_path_never_uses_messages_endpoint` | 只做同协议直通 |
 | `test_f36_*`（六条） | F36：集合恰三值、路径恰四键、Host 与转发头不改答复、`null` 仍 403 |
 | `test_bare_ids_*`（六条） | F85：裸 id 行默认关、只认 `1`、追加行、撞名不列、裸名 404 |
+| `test_*disabled*` / `test_*pool*`（六条） | A383（F95）：三态、七键闭集、HTTP 面、池维度 |
 
 ★ 全部用桩：`forward` 是注入的，`ledger` / `endpoints` / `rpm_limits` / `stamps` 都是参数，
   号池目录造在 `tmp_path` 里 —— **一个字节都不出网**，也不往真的 `gates/diag/` 写。
@@ -671,10 +672,10 @@ def start_server(env: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
 
     def _start(forward: Any, *, token: str = TOKEN, origins: tuple[str, ...] = (),
                require_origin: bool = False, max_bytes: int = 4096,
-               bare_ids: bool = False) -> int:
+               bare_ids: bool = False, pool: str = "codebuddy") -> int:
         server = gateway.build_server(forward, host="127.0.0.1", port=0, token=token,
                                       origins=origins, require_origin=require_origin,
-                                      max_bytes=max_bytes, pool="codebuddy", root=env,
+                                      max_bytes=max_bytes, pool=pool, root=env,
                                       bare_ids=bare_ids)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -1201,6 +1202,134 @@ def test_http_models_face_carries_window_readings(
     assert "条模型的窗口未知" in data["note"], data["note"]
 
 
+# ===================================== 卡 A383（F95）：列出来的必须能用 —— disabled 读数
+#
+# 原件 F95 的病是「列表面与准入面读两份东西」（`OfferedDrawers` vs `Drawers`）。本仓方向相反、
+# 病同一条：`/v1/models` 只认批准集（`list_models`），而准入面 `_model_block` 一请求就 403
+# ⇒ 被禁用的模型既出现在清单里、又一请求就拒。解法是**加标注不删条目**：
+# 第七键 `disabled` 三态（`None` = 没禁用 / `"?"` = 不知道 / 原样 pattern = 命中），
+# 判据是 `model_registry.model_disabled` —— 与准入面**同一份**。
+# ★ 一律把 `TF_POOL_DISABLED` 指到 tmp，不读主树那份。
+
+DISABLED_KEYS = frozenset({
+    "id", "object", "owned_by", "context_window", "max_output_tokens", "limits_source",
+    "disabled",
+})
+
+
+def test_list_models_marks_a_disabled_model_but_still_lists_it(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 1：命中禁用表 ⇒ 条目**仍在** data 里，第七键念出**原样 pattern**，note 说条数。
+
+    ★ 为什么不是过滤掉：原件 F95 是「不列出、但仍能请求」，本仓是「不许请求」——
+      删条目会把 403 变成不可解释（用户拿着拒绝文案，清单里却查不到这一条）。
+      清单的真源仍是批准集（`模型与号池.md` §7），禁用只加标注。
+    """
+    _pool_dir(env)
+    _point_disabled(tmp_path, 'disabled = ["huaweicloud-maas/*"]\n', monkeypatch)
+    out = gateway.list_models(root=env)
+    assert [item["id"] for item in out["data"]] == [MODEL], out["data"]
+    item = out["data"][0]
+    assert item["disabled"] == "huaweicloud-maas/*", item
+    assert "1 条被禁用" in out["note"], out["note"]
+    assert '0 条模型的禁用状态未知' in out["note"], out["note"]
+
+
+def test_list_models_disabled_is_none_when_the_table_is_absent(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 1 反向：禁用表不存在 ⇒ `disabled` 是 `None`（**不是** `"?"`），note 念 0。
+
+    ★ 三态里最容易混的两格就是这里：`None` = 查过了、没禁用；`"?"` = 没查成。
+      混起来的下场与窗口那一维一样 —— 「没人量过」被读成「量过、是 0」。
+    """
+    _pool_dir(env)
+    monkeypatch.setenv("TF_POOL_DISABLED", str(tmp_path / "no-such-disabled.toml"))
+    out = gateway.list_models(root=env)
+    item = out["data"][0]
+    assert item["disabled"] is None, item
+    assert "0 条被禁用" in out["note"], out["note"]
+    assert '0 条模型的禁用状态未知' in out["note"], out["note"]
+
+
+def test_list_models_has_exactly_seven_keys(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 1 / 缺口 4：键集是**闭集**，恰七键（多一个少一个都红）。
+
+    ★ 本文件原来 `grep -n "keys()"` 零命中 ⇒ E143 把三键扩成六键是**静默的**。
+      这条把「下一次再改键集」也堵上：加键必须同时改这里，逼着回答「谁读这个键」。
+    """
+    _pool_dir(env)
+    monkeypatch.setenv("TF_POOL_DISABLED", str(tmp_path / "no-such-disabled.toml"))
+    item = gateway.list_models(root=env)["data"][0]
+    assert set(item) == DISABLED_KEYS, sorted(item)
+
+
+def test_broken_disabled_table_is_a_reading_not_a_500(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 2：禁用表读不懂 ⇒ `"?"` + note 点名 + **不抛**（读面 fail-soft，不是 500）。
+
+    ★ `unknown ≠ 空表`（`model_registry.Disabled` 的 docstring）：表坏掉时 `patterns` 也是空元组，
+      只认 `patterns` 就会把「一个模型都可能被禁」读成「一个都没禁」。所以这里念 `UNKNOWN`
+      这个哨兵（`"?"`），**连 nil 都不发** —— 发 `None` 就与「没禁用」同形。
+    ★ 与准入面是镜像：`test_unknown_disabled_table_is_403` 钉「读不懂 ⇒ 403」，
+      这条钉同一件事的读数面。
+    """
+    _pool_dir(env)
+    _point_disabled(tmp_path, "disabled = [\n", monkeypatch)
+    out = gateway.list_models(root=env)          # 不抛就是通过
+    item = out["data"][0]
+    assert item["id"] == MODEL, item
+    assert item["disabled"] == pool_model_registry.UNKNOWN, item
+    assert str(pool_model_registry.UNKNOWN) in out["note"], out["note"]
+    assert "1 条模型的禁用状态未知" in out["note"], out["note"]
+
+
+def test_http_models_face_carries_the_disabled_reading(
+        start_server: Any, env: Path, tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 4 的 HTTP 面：真起服务、真 GET /v1/models —— 七键一个不少，第七键是读数。
+
+    ★ `_get` 只许调同一个 `list_models`，不许在处理器里另拼一个 dict
+      （另拼就绕开了上面的三态判据，键集闭集当场会红）。
+    """
+    _pool_dir(env)
+    _point_disabled(tmp_path, 'disabled = ["huaweicloud-maas/*"]\n', monkeypatch)
+    port = start_server(_Stub(_ok()))
+    status, _, body = _request(port, "GET", "/v1/models")
+    assert status == 200
+    data = json.loads(body)
+    assert [item["id"] for item in data["data"]] == [MODEL], data["data"]
+    item = data["data"][0]
+    assert set(item) == DISABLED_KEYS, sorted(item)
+    assert item["disabled"] == "huaweicloud-maas/*", item
+    assert "1 条被禁用" in data["note"], data["note"]
+
+
+def test_list_models_follows_the_server_pool_not_the_default(
+        start_server: Any, env: Path, tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 4 的池维度：禁止的**池**是维度，不是常量 —— 同一条 id 在两个池给两种答案。
+
+    ★ 一条 pattern `codearts/*` 只命中 codearts 池（`names_of` 的第 ② 档是
+      `provider/model`，`model_registry.py:629-646`）⇒ 不需要两张表就能把两个池分开。
+    ★ 若 `_get` 不把 `server.pool` 传下来，两边都落 `DEFAULT_POOL`（`codebuddy`）⇒ 这条红。
+      夹具 `start_server` 原来把 `pool="codebuddy"` 写死，所以它也要收一个 pool 参数。
+    """
+    _pool_dir(env)
+    _point_disabled(tmp_path, 'disabled = ["codearts/*"]\n', monkeypatch)
+    # 方向一：默认池不命中（同一个函数、同一张表，只是池不同）
+    assert gateway.list_models(root=env)["data"][0]["disabled"] is None
+    assert gateway.list_models(root=env, pool="codebuddy")["data"][0]["disabled"] is None
+    # 方向二：codearts 池命中，且念的是原样 pattern
+    assert gateway.list_models(root=env, pool="codearts")["data"][0]["disabled"] == "codearts/*"
+    # HTTP 面必须与直接调用同答案（server.pool 传下去了才算接上）
+    port = start_server(_Stub(_ok()), pool="codearts")
+    status, _, body = _request(port, "GET", "/v1/models")
+    assert status == 200
+    item = json.loads(body)["data"][0]
+    assert item["disabled"] == "codearts/*", item
+
+
 # ================================================================ F36：网络准入（卡 A376）
 
 
@@ -1446,6 +1575,9 @@ def _models_baseline() -> dict[str, Any]:
 
     ★ 这是**冻结的读数**，不是从实现里算出来的：开关关着时必须逐字节等于它。
       要改它先改卡 —— 它挡的是「顺手加个字段/换个键序」。
+    ★ 卡 A383（F95）落地时按它自己的判据 1 加了第七键 `disabled` 与 note 的两句禁用读数：
+      那是 A383 这一笔**自己**要改的形状，不是裸 id 开关改的。所以这里跟着改成 A383 之后的
+      冻结值，而「开关关着时逐字节不变」这条判据一个字没松 —— 它仍然整份比对。
     """
     return {
         "object": "list",
@@ -1456,12 +1588,14 @@ def _models_baseline() -> dict[str, Any]:
             "context_window": None,
             "max_output_tokens": pool_model_registry.UNKNOWN_MAX_OUTPUT,
             "limits_source": "unknown",
+            "disabled": None,
         }],
         "snapshot_at": "",
         "snapshot_stale": False,
         "note": (
             "有 1 条模型的窗口未知（context_window = null，"
-            f"回复上限按 {pool_model_registry.UNKNOWN_MAX_OUTPUT} 发）"
+            f"回复上限按 {pool_model_registry.UNKNOWN_MAX_OUTPUT} 发）；"
+            '有 0 条模型的禁用状态未知（disabled = "?"）；0 条被禁用（请求会 403）'
         ),
     }
 

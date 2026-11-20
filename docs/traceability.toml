@@ -12832,3 +12832,19 @@ evidence = [
   "file:复盘/卡/卡A381-F14决策模型与systemone-判SKIP_BY_REDLINE.md",
 ]
 gaps = "1. 表 B 那一行不由本卡提交：docs/subsystems/pool/README.md 在落地链回退名单（RECOUNT_DOCS）里，⓪ 步会把它 checkout 回 HEAD、③.5 只重算 pool-margin 标记之间 ⇒ 表 B 第 8 行归卡 A373 落地之后的主树 docs 提交，本卡只落 ADR + 反向钉子 + 号池文档 §8。指针 tools/pool/landing.py2. 零命中扫描范围只许 tools/ 与 scripts/ 的 .py：扩到 docs/ 或 tests/ 会咬到本卡自己的 ADR 与钉子文件；裸 jev 会命中云机 instance-id、裸 intent 会命中 intention，都在钉子白名单里点名排除。指针 tests/test_pool_no_systemone.py3. 只做到「不接」这一档：本仓没有 decision 组概念（tools/pool/model_registry.py 的 ModelEntry 七字段里没有组字段），本卡用零命中 + ADR 钉住，不新增任何路由组抽象。指针 docs/decisions/0011-no-systemone.md"
+
+[entries."T-AG671"]
+id = "T-AG671"
+title = "F95隐藏模型：列出来的必须能用，两个没有宿主的SKIP钉成闹钟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "file:tests/test_pool_disabled_wiring.py",
+  "file:tests/test_pool_hidden_scope.py",
+  "test:test_pool_hidden_scope.py::test_no_image_denylist_host_exists",
+  "test:test_pool_hidden_scope.py::test_no_routing_group_layer_exists",
+  "test:test_pool_disabled_wiring.py",
+]
+gaps = "1. `/v1/models` 的 `disabled` 键只发布读数，**不挡请求**：真正的 403 在准入面 `_model_block` 里，两处同源但读面 fail-soft（表坏了发 `「?」`）—— 也就是说「列出来 ⇒ 能用」这句话在禁用表读不懂时仍是不成立的，只是现在**念出来了**。指针 tools/pool/gateway.py2. F95 的前两步（图像模型 deny list / `listed=no` 的路由组）判 SKIP 是因为**本仓没有宿主**，两条 SKIP 钉成闹钟（长出图像面或 `[group]` 段就红）—— 哪天红了要重开 SKIP，不是放宽断言。指针 tests/test_pool_hidden_scope.py3. `disabled` 是第七键，是会漂的读数：文档里写「七键」的地方（`docs/subsystems/pool/模型与号池.md` §7 与 `docs/subsystems/pool/modules.toml` 的 gateway.py 条）已经一起改了，但再加第八键时这两处仍要人记得改。指针 docs/subsystems/pool/模型与号池.md"

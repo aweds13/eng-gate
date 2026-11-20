@@ -56,6 +56,11 @@
 - 新建 tests/test_pool_no_systemone.py（265 行 8 测）：生产码零命中、PATHS 四值、带不带 Bearer 都 404、鉴权先于路径、ADR 已写且被号池文档引用。
 - docs/subsystems/pool/模型与号池.md（+19）：新增 §8「不移植」，把结论写进读者会当现值用的那份文档。
 - 产品码零改动。
+## 2026-11-20 T-AG671 F95 隐藏模型：列出来的必须能用，两个没有宿主的 SKIP 钉成闹钟
+- tools/pool/gateway.py 的 /v1/models 每条 data 加第七键 disabled（三态：null 没禁用 / "?" 不知道 / 原样 pattern 命中即 403），与准入面 _model_block 同一份 model_registry.model_disabled；顶层 note 追加「N 条禁用状态未知；M 条被禁用」两句读数，0 也照说。
+- list_models() 加 pool 维度（空则落 model_registry.DEFAULT_POOL，与准入侧同一个默认），HTTP 面把 server.pool 传进来；被禁用条目一条不删，只加标注。
+- 新增 tests/test_pool_hidden_scope.py（83 行 / 2 钉）：tools/**/*.py 无图像三件套名、PATHS 无 image/draw、注册表无 [group 段、ModelEntry 无 listed 字段 —— 长出宿主就红。
+- tests/test_pool_gateway.py 与 tests/test_pool_disabled_wiring.py 加钉子；docs/subsystems/pool/模型与号池.md 新增 §7.1、docs/subsystems/pool/事后判据清单.md 加第 22 条、docs/subsystems/pool/modules.toml 的 gateway.py duty 补一句。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

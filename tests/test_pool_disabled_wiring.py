@@ -10,6 +10,7 @@ r"""禁用表的**生产接线**（卡 E105 · T-AG614）—— 三处入口都�
 | `test_gateway_forwards_the_status_code_not_a_fixed_404` | `if blocked` 分支用状态码变量 |
 | `test_gateway_keeps_the_four_old_blocks_at_404` | 四支老判定**仍然** 404 |
 | `test_docs_stop_claiming_zero_production_callers` | 不再写「零生产调用方」，模块地图点名三条入口 |
+| `test_the_listing_face_asks_the_same_judge_without_raising` | 清单面问判据的**不抛**那一支 |
 
 ★ 全部只读源码（AST / 文本），不起进程、不写盘。
 """
@@ -30,6 +31,12 @@ ENTRIES = (
     ("tools/wb_dispatch.py", "main"),
     ("tools/pool/gateway.py", "_model_block"),
     ("tools/pool_mcp.py", "tool_pool_dispatch"),
+)
+# ★ 卡 A383（F95）：「列出来的必须能用」的第四处入口 —— 但它是**读面**，不许问会抛的那一支。
+#   `assert_not_disabled` 一坏表就抛，读面抛出去就是 500（`/v1/models` 挂掉）；
+#   所以它问 `model_disabled`（同一个判据、不抛、返回三态），三态由清单自己念给用户看。
+READ_ENTRIES = (
+    ("tools/pool/gateway.py", "list_models"),
 )
 
 
@@ -70,6 +77,32 @@ def test_every_production_entry_asks_the_same_judge() -> None:
             assert bad not in calls, (
                 f"{rel}::{name} 直接调了 {bad} —— 那是 `model_registry` 的内部件，"
                 "在入口里再造一份判据迟早与它漂开"
+            )
+
+
+def test_the_listing_face_asks_the_same_judge_without_raising() -> None:
+    """★★ 判据 3：`list_models` 问**同一个**判据的**不抛**那一支，问且只问一次。
+
+    ★ 卡 A383（F95）的病：清单只认批准集、准入面另外判禁用 ⇒ 被禁用的模型既列出来又 403。
+      解法不是「读面自己 glob 一遍禁用表」（那就是第二份判据、迟早与准入面漂开），
+      而是调 `model_registry.model_disabled` —— 与 `assert_not_disabled` 同一份判据源。
+    ★ 也**不许**调 `assert_not_disabled`：它一坏表就抛，读面抛出去是 500，
+      而读面该做的是把「不知道」念出来（`disabled = "?"`）。
+    """
+    for rel, name in READ_ENTRIES:
+        calls = _calls(_func(rel, name))
+        assert calls.count("model_disabled") == 1, (
+            f"{rel}::{name} 里 model_disabled 出现 {calls.count('model_disabled')} 次"
+            "（应当恰 1 次）：清单面必须问那个唯一的判据"
+        )
+        assert JUDGE not in calls, (
+            f"{rel}::{name} 调了 {JUDGE} —— 它会抛，读面（/v1/models）会变成 500。"
+            "清单该用 model_disabled 拿三态，自己念给用户看"
+        )
+        for bad in SECOND_COPY:
+            assert bad not in calls, (
+                f"{rel}::{name} 直接调了 {bad} —— 那是 `model_registry` 的内部件，"
+                "在入口里再造一份判据迟早与准入面漂开"
             )
 
 

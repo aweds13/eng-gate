@@ -878,7 +878,11 @@ def _window_of(name: str, entries: Sequence[pool_model_registry.ModelEntry],
 
 
 def _models_note(base: str, unknown: int) -> str:
-    """顶层 note + 「有 N 条模型的窗口未知」（N 也照说 —— 0 是读数，不是省略）。"""
+    """顶层 note + 「有 N 条模型的窗口未知」（N 也照说 —— 0 是读数，不是省略）。
+
+    ★ 卡 A383（F95）：**签名一个字都不动**，也不改这一句的旧输出 —— 卡 E143 的证据指针
+      钉的就是这一行原文；禁用那两句由下面的 _disabled_note 单独产出、并列拼接。
+    """
     tail = (f"有 {unknown} 条模型的窗口未知（context_window = null，"
             f"回复上限按 {pool_model_registry.UNKNOWN_MAX_OUTPUT} 发）")
     return f"{base}；{tail}" if base else tail
@@ -909,10 +913,14 @@ def _bare_rows(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]], in
         extra.append(bare)
     return extra, skipped
 
+def _disabled_note(disabled_unknown: int, disabled_hit: int) -> str:
+    """禁用两态的条数（N 也照说）—— 「拒绝维度」与上面「窗口未知」并列，谁也不覆盖谁。"""
+    return (f'有 {disabled_unknown} 条模型的禁用状态未知（disabled = "?"）'
+            f"；{disabled_hit} 条被禁用（请求会 403）")
 
 def list_models(*, root: Path | str | None = None,
-                bare_ids: bool | None = None) -> dict[str, Any]:
-    """GET /v1/models 的数据：批准集（唯一权威）+ 快照状态 + 窗口读数。**不联网、不写快照。**
+                bare_ids: bool | None = None, pool: str = "") -> dict[str, Any]:
+    """GET /v1/models 的数据：批准集 + 快照状态 + 窗口读数 + 禁用读数。**不联网、不写快照。**
 
     ★ 卡 E143（F86 ①）：每条 data 带 context_window / max_output_tokens / limits_source。
       不知道就是 null + 按 UNKNOWN_MAX_OUTPUT（model_registry 那一处）发；
@@ -922,10 +930,17 @@ def list_models(*, root: Path | str | None = None,
       不接请求）。关着时输出与今天逐字节相同 —— 这是默认值，也是判据 1。
       bare_ids=None（不传）⇒ 按 `BARE_IDS_ENV` 现算，与命令壳同一条判据
       （`bare_ids_from_env` 那一处）；HTTP 面不信 env，只信服务建好时那一刻的读数。
+    ★ 卡 A383（F95）：「列出来的必须能用」。每条 data 带第七键 disabled（**拒绝维度**），
+      判据是 pool_model_registry.model_disabled —— 与准入面 _model_block 的
+      assert_not_disabled **同一份**；这里只问、不抛（读面必须 fail-soft，照 _window_entries）。
+      三态：null = 没禁用 / "?" = 不知道（当禁用处理）/ 其它 = 命中的原样 pattern。
+      被禁用的条目**一条都不删**（清单的真源是批准集），只加标注 —— 否则 403 时无处可查。
+    ★ pool 是**维度**不是可选项：空则落 model_registry.DEFAULT_POOL（与准入侧同一个默认）。
     """
     if bare_ids is None:   # 直调方（验收 ③）不经过命令壳 ⇒ 这里按同一处判据现算
         bare_ids = bare_ids_from_env(os.environ.get(BARE_IDS_ENV))
     base = _base_root(root)
+    which = (pool or pool_model_registry.DEFAULT_POOL).strip()
     pool_dir = pool_models.find_pool_dir(base)
     if pool_dir is None:
         return {"object": "list", "data": [], "note": "找不到号池目录 ⇒ 不猜模型清单"}
@@ -942,12 +957,20 @@ def list_models(*, root: Path | str | None = None,
     entries = _window_entries()
     data: list[dict[str, Any]] = []
     unknown = 0
+    disabled_unknown = 0
+    disabled_hit = 0
     for name in info.get("approved") or []:
         entry = _window_of(str(name), entries)
         context_window = entry.context_window if entry is not None else None
         max_output = entry.max_output if entry is not None else None
         if context_window is None:
             unknown += 1
+        # 拒绝维度：命中原样 pattern / UNKNOWN（不知道 ⇒ 当禁用处理）/ None（没禁用）。
+        disabled = pool_model_registry.model_disabled(which, str(name))
+        if disabled == pool_model_registry.UNKNOWN:
+            disabled_unknown += 1
+        elif disabled is not None:
+            disabled_hit += 1
         data.append({
             "id": str(name), "object": "model", "owned_by": "pool",
             "context_window": context_window,   # None = 不知道（JSON null，不填假数）
@@ -955,14 +978,17 @@ def list_models(*, root: Path | str | None = None,
                                   else pool_model_registry.UNKNOWN_MAX_OUTPUT),
             "limits_source": ("registry" if (context_window is not None
                                              or max_output is not None) else "unknown"),
+            "disabled": disabled,               # None / "?" / 原样 pattern（三态，不洗）
         })
-    note = _models_note(str(info.get("snapshot_note") or ""), unknown)
+    note_bits = [_models_note(str(info.get("snapshot_note") or ""), unknown),
+                 _disabled_note(disabled_unknown, disabled_hit)]
     if bare_ids:
         extra, skipped = _bare_rows(data)
         data = [*data, *extra]
-        note = f"{note}；有 {skipped} 条裸 id 因重名未列"
+        note_bits.append(f"有 {skipped} 条裸 id 因重名未列")
     return {"object": "list", "data": data, "snapshot_at": info.get("snapshot_at"),
-            "snapshot_stale": bool(info.get("snapshot_stale")), "note": note}
+            "snapshot_stale": bool(info.get("snapshot_stale")),
+            "note": "；".join(bit for bit in note_bits if bit)}
 
 
 # ------------------------------------------------- 真实转发（今天走不到：chat_urls 全空）
@@ -1250,7 +1276,8 @@ class _Handler(BaseHTTPRequestHandler):
     def _get(self, path: str) -> None:
         if path == "/v1/models":
             data = list_models(root=getattr(self.server, "root", None),
-                               bare_ids=bool(getattr(self.server, "bare_ids", False)))
+                               bare_ids=bool(getattr(self.server, "bare_ids", False)),
+                               pool=str(getattr(self.server, "pool", "") or ""))
             body = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self._send(200, body, content_type="application/json; charset=utf-8")
             return

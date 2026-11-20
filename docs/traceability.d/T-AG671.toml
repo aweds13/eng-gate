@@ -1,0 +1,16 @@
+[entries."T-AG671"]
+id = "T-AG671"
+title = "F95隐藏模型：列出来的必须能用，两个没有宿主的SKIP钉成闹钟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "file:tests/test_pool_disabled_wiring.py",
+  "file:tests/test_pool_hidden_scope.py",
+  "test:test_pool_hidden_scope.py::test_no_image_denylist_host_exists",
+  "test:test_pool_hidden_scope.py::test_no_routing_group_layer_exists",
+  "test:test_pool_disabled_wiring.py",
+]
+gaps = "1. `/v1/models` 的 `disabled` 键只发布读数，**不挡请求**：真正的 403 在准入面 `_model_block` 里，两处同源但读面 fail-soft（表坏了发 `「?」`）—— 也就是说「列出来 ⇒ 能用」这句话在禁用表读不懂时仍是不成立的，只是现在**念出来了**。指针 tools/pool/gateway.py2. F95 的前两步（图像模型 deny list / `listed=no` 的路由组）判 SKIP 是因为**本仓没有宿主**，两条 SKIP 钉成闹钟（长出图像面或 `[group]` 段就红）—— 哪天红了要重开 SKIP，不是放宽断言。指针 tests/test_pool_hidden_scope.py3. `disabled` 是第七键，是会漂的读数：文档里写「七键」的地方（`docs/subsystems/pool/模型与号池.md` §7 与 `docs/subsystems/pool/modules.toml` 的 gateway.py 条）已经一起改了，但再加第八键时这两处仍要人记得改。指针 docs/subsystems/pool/模型与号池.md"
+
