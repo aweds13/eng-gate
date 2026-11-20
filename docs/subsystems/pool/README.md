@@ -178,6 +178,7 @@ pool 只做**派活与收口**。下面三张表是全卡的主判据：写偏�
 | 5 | 不判模型额度与批准集 | 批准集在号池快照 + `tools/pool/model-registry.toml`；pool 只**读** | `tools/pool/models.py:1`（"只读、不联网、不写快照"） |
 | 6 | 不做审计结论 | 归 `scripts/audit_progress.py` | `tools/pool/landing.py:37`（⑦ 调它） |
 | 7 | 不做技能口径 | 归 `skills/`（分区 G）；**删掉 `skills/` 框架仍可用** | `skills/README.md` |
+| 8 | 不做协议翻译，也不开第五条路径（决策模型 / System One 不移植） | 判据在网关模块头那四条边界；决定写在 `docs/decisions/0011-no-systemone.md` | `tools/pool/gateway.py:96-101`（PATHS 恰四条）；`tests/test_pool_no_systemone.py`（systemone 零命中） |
 
 ### 表 C · 与相邻子系统的交界（交界处谁说话）
 
