@@ -7007,3 +7007,19 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E146"
+task = "T-G385"
+title = "封存指纹的临时索引只有一个名字：并发读者互相锁死、封存指纹静默退化成None"
+tree = ".wt/E146"
+spec = "复盘/卡/卡E146-封存指纹的临时索引只有一个名字.md"
+files = [
+  "scripts/run_gates.py",
+  "tests/test_gate_index_path.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡E146-封存指纹的临时索引只有一个名字.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
