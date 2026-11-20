@@ -75,6 +75,11 @@
 - 新增 tools/pool/searcher.py（508 行，六个纯函数，零出网零 IO）：chosen + rank 回答「谁被点名、为什么不能用」（四值 why gone / off / cant / nomodel 逐字照 magpie chosenSearcher）、turn 回答「这一轮按什么序问、问几个」（最多 3 个、同一 provider 不重复问、manual relay 只在被点名时可问）、verdict 把三种失败分开（搜了没找到 / 压根没搜 / 报错，Sources: 段只在 1 到 20 条时追加）、search / instead 回答「让给了谁、算不算静默」。
 - 新增 tests/test_pool_searcher.py（492 行 / 30 用例）：四值 why 各自可区分、rank 十行静态表、turn 三条上界、verdict 三态、Sources 段边界、让位序、off 只关 provider 搜索而 Search API 那条路照跑。
 - docs/subsystems/pool/modules.toml 新增 searcher.py 条（duty + cli 两行），点明「未接生产路径，接面是另一张卡」。
+## 2026-11-20 T-AG666 F59 三个自带 MCP server：按路径挂载，每路径各自一个上限
+- tools/pool/mcp_http.py（406→474）加路径轴：路由表按 path 分发、每条路径可各自带一个 max_bytes，未知路径不再一律执行而是点名拒绝。
+- tools/pool_mcp.py（+1 行）：把路径表传给 build_server。
+- 新建 tests/test_pool_mcp_http_paths.py（282 行 6 测）：同名路径各自上限、未知路径拒绝、GET 仍 405、超限 413 文案仍单一来源。
+- 传输面开工前实测过：POST /nope 原先 200 并执行、GET /nope 405 + Allow: POST —— 本卡把「未知路径照样执行」这一条修掉。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

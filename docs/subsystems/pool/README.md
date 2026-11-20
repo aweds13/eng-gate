@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24218 行**（`wc -l tools/pool/*.py`，2026-11-21 现算）。
+`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24286 行**（`wc -l tools/pool/*.py`，2026-11-21 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -41,7 +41,7 @@
 | `limits_check.py` | 174 | 派活**之前**的预算授权：这个号这个窗口还有余量吗 + `Retry-After`（`budget.Reserve` 移植）；按钱那一条遇到**没有价**的行就说「判不了」并拒，不许拿 cost=0.0 当还有余量 | 无 |
 | `limits_policy.py` | 345 | 限额策略的窗口与 `Limit` 形状（magpie `access/limit.go` 移植）；与 `--input-budget` 熔断的语义差写在文件头 | 无 |
 | `locks.py` | 76 | 门禁锁的只读封装：`status_argv` / `parse_entries`（拿/放/续租仍归 `gates/diag/gate_lock.py`） | 无（被 `pool_mcp` 调） |
-| `mcp_http.py` | 406 | MCP 的 Streamable HTTP 传输：Origin / Bearer / 版本头 / 上限 / 202-405 都在这一层；判据只在传进来的 handle 上跑，不重写方法分发 | 无（被 tools/pool_mcp.py 调） |
+| `mcp_http.py` | 474 | MCP 的 Streamable HTTP 传输：Origin / Bearer / 版本头 / 上限 / 202-405 都在这一层；判据只在传进来的 handle 上跑，不重写方法分发 | 无（被 tools/pool_mcp.py 调） |
 | `model-registry.toml` | 63 | 跨池统一层：CodeBuddy 池的真源 + 码道池的引用（只引用不复制，不许有第二份可写名单） | 无（被 `pool.model_registry` 读） |
 | `model_registry.py` | 1017 | 一层模型注册表、按池分流：`resolve_model` / `effective_allowed_for`（裸名 vs `provider/model` 两套 id 体系）+ 禁用表 `assert_not_disabled`（与注册表同目录的 `model-disabled.toml`；读不到≠没禁用） | 无（被 `wb_dispatch`、`wb_watch`、`pool.plan` 调；禁用判据被 `wb_dispatch` 派活主闸、`gateway._model_block`、`pool_mcp` 干跑面三处调） |
 | `models.py` | 398 | 号池模型的只读读取：号池批准集 ∩ 号池快照（★ 不是派活允许集）；另给批准集逐条按池的派活真判决（可派 / 未接 / 跨池串用 / 未授权 + 今天的可派别名），判序照抄派活主闸、现算不写死；读快照（带 `at`），不联网、不写快照；过期时由 `probe_command` / `probe_hint` 现算出「怎么让它变新」的那条命令（脚本不在就明说没有，不给假命令），读面三处都调它不各自拼句 | `wb_state.py`、`pool_mcp` |
@@ -93,8 +93,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **24218 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 421 张（403 done / 18 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **24286 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 421 张（404 done / 17 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

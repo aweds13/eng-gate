@@ -3612,6 +3612,7 @@ def _run_http(tail: list[str]) -> int:
             max_bytes=MAX_LINE_BYTES,
             protocols=KNOWN_PROTOCOLS,
             require_origin=require_origin,
+            mounts={"/": MAX_LINE_BYTES},
             log=lambda line: print(line, file=sys.stderr, flush=True),
         )
     except mcp_http.ConfigError as exc:

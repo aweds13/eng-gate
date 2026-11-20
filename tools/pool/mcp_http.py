@@ -25,8 +25,11 @@ r"""号池 MCP 的 **Streamable HTTP 传输**（卡 A365 · 台账号 T-AG584）
   传进来，**这里不另写一份**。
 - **无会话**：**不发** `Mcp-Session-Id`：`handle()` 本来就无状态，发了就要维护"终止后 404"
   那一套，本卡不做。**带了**这个头的请求照样处理（不认识 ≠ 拒收）。
-- **有上限**：请求体上限复用调用方传进来的 `max_bytes`（`pool_mcp.MAX_LINE_BYTES`）；
-  超限 ⇒ **413**，**按块读、不把整份吃进内存**。
+- **有上限**：请求体上限**只**来自调用方 —— 每路径一个（`mounts`），缺省
+  `{"/": max_bytes}`（`pool_mcp.MAX_LINE_BYTES`）；超限 ⇒ **413**，**按块读、不把整份吃进内存**。
+- **按路径挂载**（卡 A378）：只服务调用方挂上去的路径（缺省 `/`），别的路径 **404 且不执行**
+  —— **先路径、后方法**（同 `tools/pool/gateway.py` 的次序）；每条路径**各带自己的上限**，
+  数值仍全部由调用方给，这一层一个上限字面量都不写。
 
 **坏消息不打死服务**：非 UTF-8 / 非 JSON / 不是对象一律 **400**（不是 500），
 连接关掉、服务继续接下一个。
@@ -44,10 +47,12 @@ from __future__ import annotations
 import hmac
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import MappingProxyType
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Mapping
     from typing import IO, Any
 
     Message = dict[str, Any]
@@ -73,6 +78,9 @@ DEFAULT_PROTOCOL = "2025-03-26"
 
 #: 一次 `read()` 最多要多少字节 —— 超限时只读到上限附近就收手，不把整份请求吃进内存。
 CHUNK_BYTES = 64 * 1024
+
+#: 缺省挂载点（卡 A378）：只传 `max_bytes` 的既有调用方 ≡ 只挂这一条路径。
+DEFAULT_PATH = "/"
 
 
 class ConfigError(ValueError):
@@ -149,6 +157,29 @@ def bearer_ok(header: str | None, token: str) -> bool:
     return hmac.compare_digest(value.strip().encode("utf-8"), token.encode("utf-8"))
 
 
+def mount_table(max_bytes: int, mounts: Mapping[str, int] | None) -> Mapping[str, int]:
+    """把调用方给的挂载映射归一成**冻结**的「路径 → 上限」表（卡 A378）。
+
+    `mounts is None` ⇒ `{DEFAULT_PATH: max_bytes}` —— 只传 `max_bytes` 的既有调用方
+    行为一字不变（`tests/test_pool_mcp_http.py` 的 25 条全打 `/`）。
+    ★ 上限的**数字全部来自调用方**：这一层连一个上限字面量都不写（判据 5）。
+    """
+    if mounts is None:
+        return MappingProxyType({DEFAULT_PATH: int(max_bytes)})
+    table: dict[str, int] = {}
+    for raw_path, raw_limit in mounts.items():
+        path = urlsplit(raw_path).path.rstrip("/") or DEFAULT_PATH
+        limit = int(raw_limit)
+        if limit <= 0:
+            raise ConfigError(f"路径 {raw_path!r} 的请求体上限必须为正数，收到 {raw_limit!r}。")
+        if path in table:
+            raise ConfigError(f"路径 {path!r} 挂了两次（归一化之后撞了）。")
+        table[path] = limit
+    if not table:
+        raise ConfigError("mounts 不能是空表：至少挂一条路径（缺省用 / → max_bytes）。")
+    return MappingProxyType(table)
+
+
 class _Handler(BaseHTTPRequestHandler):
     """一条请求 → 一次判定 → 一条回话；所有协议细节都在这一层。"""
 
@@ -189,6 +220,27 @@ class _Handler(BaseHTTPRequestHandler):
             headers=headers,
         )
 
+    def _path(self) -> str:
+        """这条请求的**挂载键**（卡 A378）：去掉 query / 末尾斜杠，空 ⇒ `/`。"""
+        return urlsplit(self.path).path.rstrip("/") or DEFAULT_PATH
+
+    def _mount_limit(self) -> int | None:
+        """已挂载 ⇒ 该路径**自己的**上限；未挂载 ⇒ 回一条 404 并 `None`。
+
+        次序照 `tools/pool/gateway.py` 的 `_dispatch`：**先路径、后方法**
+        —— 未挂载的路径不论 GET / POST 都是 404，不落到 405 上。
+        """
+        path = self._path()
+        mounts = getattr(self.server, "mounts", {})
+        if path not in mounts:
+            self._fail(
+                404,
+                f"没有这条路径：{path!r}。本服务只服务调用方挂上去的路径"
+                f"（{'、'.join(sorted(mounts)) or '无'}）。",
+            )
+            return None
+        return int(mounts[path])
+
     def _origin_allowed(self) -> bool:
         origin = self.headers.get("Origin")
         if not origin:
@@ -212,7 +264,9 @@ class _Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------------- 方法
 
     def do_POST(self) -> None:  # noqa: N802 —— 基类约定
-        max_bytes = getattr(self.server, "max_bytes", 0)
+        max_bytes = self._mount_limit()
+        if max_bytes is None:
+            return
         if not self._origin_allowed():
             self._fail(
                 403,
@@ -284,6 +338,8 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, body, content_type="application/json")
 
     def do_GET(self) -> None:  # noqa: N802 —— 基类约定
+        if self._mount_limit() is None:
+            return
         self._fail(
             405,
             "本服务不提供 SSE（GET 流），请用 POST 发 JSON-RPC。",
@@ -291,6 +347,8 @@ class _Handler(BaseHTTPRequestHandler):
         )
 
     def do_DELETE(self) -> None:  # noqa: N802 —— 基类约定
+        if self._mount_limit() is None:
+            return
         self._fail(
             405,
             "本服务无会话可终止（不发 Mcp-Session-Id）。",
@@ -298,9 +356,13 @@ class _Handler(BaseHTTPRequestHandler):
         )
 
     def do_PUT(self) -> None:  # noqa: N802 —— 基类约定
+        if self._mount_limit() is None:
+            return
         self._fail(405, "只收 POST。", headers=(("Allow", "POST"),))
 
     def do_PATCH(self) -> None:  # noqa: N802 —— 基类约定
+        if self._mount_limit() is None:
+            return
         self._fail(405, "只收 POST。", headers=(("Allow", "POST"),))
 
 
@@ -319,6 +381,7 @@ class _Server(ThreadingHTTPServer):
         require_origin: bool = False,
         max_bytes: int,
         protocols: Iterable[str],
+        mounts: Mapping[str, int] | None = None,
         log: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(address, _Handler)
@@ -326,6 +389,7 @@ class _Server(ThreadingHTTPServer):
         self.token = token
         self.require_origin = require_origin
         self.max_bytes = max_bytes
+        self.mounts = mount_table(max_bytes, mounts)
         self.protocols = frozenset(protocols)
         self.request_log = log
         port = int(self.server_address[1])
@@ -344,6 +408,7 @@ def build_server(
     max_bytes: int,
     protocols: Iterable[str],
     require_origin: bool = False,
+    mounts: Mapping[str, int] | None = None,
     log: Callable[[str], None] | None = None,
 ) -> _Server:
     """建好但**不跑**（测试用它在后台线程里起一条真 socket）。
@@ -366,6 +431,7 @@ def build_server(
         require_origin=require_origin,
         max_bytes=max_bytes,
         protocols=protocols,
+        mounts=mounts,
         log=log,
     )
 
@@ -380,6 +446,7 @@ def serve_http(
     max_bytes: int,
     protocols: Iterable[str],
     require_origin: bool = False,
+    mounts: Mapping[str, int] | None = None,
     log: Callable[[str], None] | None = None,
 ) -> int:
     """起服务并**一直阻塞**（Ctrl+C 收工回 0）。`port=0` ⇒ 由内核分配。"""
@@ -392,6 +459,7 @@ def serve_http(
         max_bytes=max_bytes,
         protocols=protocols,
         require_origin=require_origin,
+        mounts=mounts,
         log=log,
     )
     bound = int(server.server_address[1])

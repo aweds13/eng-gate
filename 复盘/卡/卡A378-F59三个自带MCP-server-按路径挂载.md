@@ -110,8 +110,9 @@ magpie 收 JSON-RPC batch：`search_mcp.go:80-124` 里 `batch := len(body) > 0 &
 
 - **怎么证明**：同文件 `test_three_capability_surfaces_are_absent`，三段断言：
   1. 工具名单对账：`assert [t["name"] for t in pool_mcp.tool_list()] == TOOL_NAMES`，`TOOL_NAMES` 直接 `from test_pool_mcp import TOOL_NAMES`（该表在 `tests/test_pool_mcp.py:45-59`，十三项固定），并 `assert not any(name in TOOL_NAMES for name in ("web_search", "web_fetch", "analyze_image", "generate_image", "generate_video", "generation_result"))`；
-  2. 源码缺席：遍历 `tools/` 与 `src/` 的 `*.py`，`assert not [p for p in files if re.search(r"web_search|analyze_image|generate_image", p.read_text(encoding="utf-8"))]`（今天 0 命中）；
+  2. 源码缺席：遍历 `tools/` 与 `src/` 的 `*.py`，`assert not [p for p in files if re.search(r"\b(?:web_search|analyze_image|generate_image)\b", p.read_text(encoding="utf-8"))]`（只认**整名**，见下条）；
   3. 开放世界标记：`assert [t["name"] for t in pool_mcp.tool_list() if t.get("annotations", {}).get("openWorldHint")] == []`。
+- ★ **落地修（卡 A378 · T-AG666，2026-11-21）**：第 2 段原稿是**全文子串**扫（`web_search|analyze_image|generate_image` 不带词边界），第一趟全量门禁因此红 —— 报错原文 `× 1 [AssertionError] assert ['tools\\pool\\searcher.py'] == [] ← tests/test_pool_mcp_http_paths.py::test_three_capability_surfaces_are_absent`。根因不是本卡的代码：卡 A385（F57）刚落成的 `tools/pool/searcher.py` 里写着上游那个响应类型名 `web_search_tool_result`（`:33` / `:56` / `:335` / `:365`），它是**读到**的协议名字，不是**注册**的能力面；子串扫把「不许实现搜索」偷偷升级成「不许提上游协议」，那是另一条判据。修法：改成**整名**（`\b(?:…)\b`），并加两条自证断言（`assert pattern.search('{"name": "web_search"}')` 证明整名扫得到裸名字；`assert not pattern.search("web_search_tool_result")` 证明词边界真的挡得住前缀），判据强度不减：真有人把 `web_search` 注册成工具名或写进源码，仍会红（`gates/diag/_rev_378.py` 的 M4 咬的就是这条）。
 - 为什么不在 `tests/test_pool_mcp.py` 里加：那张文件已经被 `TOOL_NAMES` 与「未知工具 -32602」占住（`:313` `assert "没有这个工具" in reply["error"]["message"]`），本卡的缺席判据放新文件，卡域才不撞（`tools/pool/plan.py:60-64` 精确字符串相交）。
 
 ## 反向变异（四条，外加一条只改注释的安静对照）
@@ -125,6 +126,8 @@ magpie 收 JSON-RPC batch：`search_mcp.go:80-124` 里 `batch := len(body) > 0 &
 | M3 | `mcp_http.py:266-268` 前后加 batch 分支（照 `search_mcp.go:80-124` 抄 `if text.startswith("["):`） | 判据 4 | `b"[]"` 与单元素数组不再 400 ⇒ `assert status == 400, payload` 红（既有 `:391-399` 直接咬） |
 | M4 | `tools/pool_mcp.py:615-620` `tool_list()` 的 `specs` 里加一条 `{"name": "web_search", …}` | 判据 6 | 工具数 13→14 ⇒ `assert [t["name"] …] == TOOL_NAMES` 红，且缺席断言红 |
 | N1 | **只改注释**：把 `mcp_http.py:26-27` 那句「**无会话**」换一种说法（同一个意思） | 无 | 六条判据全绿 —— 安静对照，证明钉子咬的是行为不是文字 |
+
+> **落地实测（T-AG666，2026-11-20）与本草稿的两处出入**：①脚本落在 **gates/diag/_rev_378.py**、结果落 `gates/diag/_rev_378_result.txt`（不是本草稿写的 `_rev_F59.py`；按主控派活的命名走，两者都在主树且被 `.gitignore:76 gates/diag/*` 盖住）；②复原用 **try/finally 写回原字节 + sha256[:16] 核对**，**不用** `git checkout --`（主控硬约束：工人不许跑任何 git 写命令）。实际锚点：M1 = `if path not in mounts:` 短路成 `if False and path not in mounts:`；M2 = `return int(mounts[path])` 改回 `getattr(self.server, "max_bytes", 0)`；M3 = `if not isinstance(message, dict):` 前插入 `if isinstance(message, list): message = message[0] if message else {}`；M4 与 N1 同本表。实测 `4/4 咬住 + N1 安静`，咬住的测试依次是 `test_unmounted_path_is_404_and_never_executes` / `test_each_mounted_path_has_its_own_limit` / `test_single_element_batch_is_still_400_on_mounted_path`+`test_bad_body_is_400_and_service_continues[[]]` / `test_three_capability_surfaces_are_absent`。
 
 > 变异脚本**不许**留在树上当钉子：`docs/subsystems/pool/README.md:79-80` 逐字「> 卡树里的 `gates/diag/` 是 gitignore 的，写进去等于没写（`tools/pool/registry.py:72`、`tools/pool/task.py:119`）。」
 
@@ -159,6 +162,7 @@ python -X utf8 gates/diag/_rev_F59.py
 - 判据 1/2/5/6 是**新建用例**，第一次跑是新增；主树今天 0 条。
 - 反向变异脚本跑完必须 `git checkout -- tools/pool/mcp_http.py tools/pool_mcp.py` 复原，**不许**把变异带进落地提交。
 - `scripts/gen_pool_readme.py` 未接门（`grep -rn gen_pool_readme gates/defs/ scripts/run_gates.py` 全 0 命中），但落地链会跑 `scripts/check_derived_docs.py`；本卡不改 `modules.toml` 与 README，`--check` 应保持绿（起草时为绿：`[OK  ] docs/subsystems/pool/README.md 与现算一致`）。
+  - ★ **落地实测（T-AG666，2026-11-20）这一条已不绿**：`python -X utf8 scripts/gen_pool_readme.py --check` ⇒ `[FAIL] docs/subsystems/pool/README.md 与现算不一致：3 行` —— 第 12/88 行体量（现算 21365 vs 文档 21297）、第 42 行 `mcp_http.py` 行数（现算 474 vs 文档 406）。原因：README 是**生成文件**，它把 `tools/pool/*.py` 的逐文件行数也投影了，而本卡真动了 `mcp_http.py`。`docs/subsystems/pool/README.md` 不在卡域（AGENTS.md 硬禁令：不许手改生成文件）⇒ 由落地链 `tools/pool/landing.py:650 refresh_derived_before_gate`（③.5，`if not a.commit_only:` 块内、③ 之后、③′ 之前）真写盘修回并把脏文件补进 `allow`；不要在本卡里手改它。
 
 ## 不许做
 
@@ -180,7 +184,7 @@ python -X utf8 gates/diag/_rev_F59.py
 
 ## 未坐实项（草稿如实标注，别当成结论）
 
-- **未取证**：`tools/pool/mcp_http.py` 加 `urlsplit` 后 `tests/test_pool_mcp_http.py` 的 25 条是否**全部**仍绿 —— 我只逐条读了断言（全打 `"/"`）并推演，没有真改产品码验证（本轮是起草，改码不是本轮的活）。
+- ~~**未取证**：`tools/pool/mcp_http.py` 加 `urlsplit` 后 `tests/test_pool_mcp_http.py` 的 25 条是否**全部**仍绿~~ ⇒ **落地已实测（T-AG666，2026-11-20）**：`python -X utf8 -m pytest tests/test_pool_mcp_http.py -q -o addopts= --no-cov -p no:xdist` ⇒ `30 passed in 12.25s`（25 个 `def test_`，`@pytest.mark.parametrize` 展开成 30 条）；断言正文**零改动**。
 - **未取证**：`mounts` 这个形参名是否该与 `tools/pool/gateway.py` 的 `PATHS` 统一 —— 那边是模块级常量表，本卡是运行期传入的映射，我倾向保持两种形状（一次性 vs 可配置），但没有第二处消费者来证。
 - **未坐实**：magpie `web_search` 的后端到底调哪家外部 API —— 我只据 `gates/diag/_magpie_scope.md:64`（F56「搜索 API 多 key 轮换」判 PORT|no）与 `_magpie_features.md` 的入口描述推断它出网，**没有**在 magpie 源码里逐行读搜索实现。SKIP_BY_REDLINE 的结论不依赖具体厂商，但「一定出网」这句我只到「同族已知出网」这一级。
 - **未坐实**：`vision_mcp.go` 的 `analyze_image` 是否也走外部 VLM —— 同一类推断（`:37` `visionFileMax = 20 << 20` 的 20 MiB 上传上限是强旁证，但不是逐行读到的调用点）。
