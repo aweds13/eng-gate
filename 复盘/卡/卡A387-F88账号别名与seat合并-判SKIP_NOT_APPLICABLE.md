@@ -285,7 +285,7 @@ sed -n '184,185p' tools/pool/cleared.py
 - 默认 `addopts` 带覆盖率门槛（`pyproject.toml:51` 逐字 `addopts = "-q -m \"not acceptance and not chain\" --cov=timeflow --cov-fail-under=70"`）⇒ 单跑一个文件不加 `-o addopts= --no-cov` 会因为覆盖率不到 70 而红，那与本卡无关。
 - 光秃秃 `grep -rn seat tools/` 会撞 `tools/pool/gateway.py`（31 处）与 `tools/pool/route.py`（96 处）—— 那是「号 id」的意思，不是本卡的对象。用判据 1 的词表，别用 `seat` 单字。
 - 真实账本在**仓外**（`D:/repo/infra/pool/accounts.toml`），别的机器上可能不存在 ⇒ 判据 3 那一条必须是 skip，不是 fail。
-- `pipe doctor` 在本仓跑不了（无 `pipe` 包、无 `tools/doctor.py`，唯一入口是 `tools/pipe.cmd`）⇒ 验收里不列它。
+- `pipe doctor` 在本仓跑不了（无 `pipe` 包、无 tools/doctor.py（仓里没有这个文件），唯一入口是 `tools/pipe.cmd`）⇒ 验收里不列它。
 
 ## 不许做
 
@@ -303,7 +303,7 @@ sed -n '184,185p' tools/pool/cleared.py
 2. **`D:/repo/program/_ext/_magpie_features.md:740` 说的「文档所指 services.accounts.ts」在 magpie 仓里不存在** —— `find . -name accounts.ts` 空、无 `services/` 目录。该行「实现」列真正指的三个 Go 文件都在（`quotas.go` / `planquota.go` 的 `PlanQuotas` 在 `:719` / `account_seats.go`），TS 那句是功能清单作者的误记。**未坐实**。
 3. **「合并后少一张卡」这个效果在本仓无法观察。** 唯一出口是管理面 `GET /v1/magpie/quotas`，本仓 `PATHS` 恰四条、`tools/pool/gateway.py:98` 明写不开管理面 ⇒ 本卡只能钉「机制与出口都不在」，**钉不了「合并逻辑本身对不对」**。
 4. **「两条同 label、不同 id 的账本行各占一行」这条运行时探针没跑通。** 造临时账本时先被 `LedgerError: 账号 a-1 的 approved_models 含未批准模型：['m']（批准权只在用户）` 挡住（需 monkeypatch `pool_accounts._approved_models_from_whitelist`），补上后又被 `LedgerError: 账号 a-1 缺 [account.credential] 表`（抛点 `tools/pool_accounts.py:219`）挡住 ⇒ 判据 4 改成**读源码文本**，不写运行时断言。**未坐实**。
-5. **`pipe doctor` 跑不了**：本仓无 `pipe` 包（`python -m pipe` ⇒ `No module named pipe`）、无 `tools/doctor.py`，唯一入口是 `tools/pipe.cmd`。开工自检因此没跑成，所有读数改用 `git rev-parse` + grep + pytest 实读。
+5. **`pipe doctor` 跑不了**：本仓无 `pipe` 包（`python -m pipe` ⇒ `No module named pipe`）、无 tools/doctor.py（仓里没有这个文件），唯一入口是 `tools/pipe.cmd`。开工自检因此没跑成，所有读数改用 `git rev-parse` + grep + pytest 实读。
 6. **`_ext/` 在本仓不存在** —— 真身在 `D:/repo/program/_ext/`（相对本仓是 `../_ext/`）。本卡把 magpie 引用写全前缀（便于与既有勘察件对齐），但**它不是本仓路径**，任何工具拿它当相对路径都会 `No such file or directory`；复核时请加全前缀。
 
 ## 与已完成卡的关系
