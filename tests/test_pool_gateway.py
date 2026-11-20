@@ -193,6 +193,11 @@ def test_classify_structured_quota_wins_over_status(field: str, value: str) -> N
     b'{"detail":"\xe4\xbd\x99\xe9\xa2\x9d\xe7\x94\xa8\xe5\xae\x8c\xe4\xba\x86"}',
     b"quota exceeded",
     b"",
+    # 上游说「不吃图」的三种措辞（F94 seer 的 imageRefusedWords 认的那几条）：
+    # 一个字都不算数 —— 只看状态码。
+    b'{"error":{"message":"unknown variant `image_url`, expected `text`"}}',
+    b"is not a multimodal model",
+    "不支持图片".encode(),
 ])
 def test_classify_ignores_free_text(body: bytes) -> None:
     """★ 绝不解析自由文案：措辞里写着 quota / 余额不足也**只按状态码**判。"""
@@ -433,6 +438,41 @@ def test_overflow_is_not_retried_on_another_seat(env: Path) -> None:
     outcome = _run(env, forward, rows=(_row(SEAT_A), _row(SEAT_B)))
     assert outcome.status == 413
     assert len(forward.calls) == 1
+
+
+def test_image_request_is_one_forward_call(env: Path) -> None:
+    """卡 A373（F94）：带图请求被「不吃图」拒掉之后 —— 只发一次，body 一个字节不改。
+
+    seer 的第三根支柱是「同一候选改写 body 后立刻重试」（magpie gateway.go:3260-3286）。
+    本仓 bad_request 的语义是「请求本身不对，原样透传、一次都不重发」，所以这里钉住：
+    forward 只被调一次，且第 4 位 payload 与入参**逐字节**相同（没被 seenBody 那类改写碰过）。
+
+    ★ 直接调 route_once（不用 _run：它把 body 写死在 b'{"model":"x"}'），并用 env 夹具
+      造好 infra/pool/pool_models.py —— 否则未批模型先回 404，这条就成了永远解释不清的假绿。
+    """
+    body = json.dumps({
+        "model": MODEL,
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": "这张图里是什么？"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}},
+        ]}],
+    }).encode("utf-8")
+    refused = json.dumps({"error": {"message":
+                                    "Failed to deserialize the JSON body: unknown variant "
+                                    "image_url, expected text"}}).encode("utf-8")
+    forward = _Forward(gateway.Reply(status=422, headers={"Content-Type": "application/json"},
+                                     body=refused))
+    outcome = gateway.route_once(
+        pool="codebuddy", model=MODEL, caller="alice", forward=forward,
+        protocol=gateway.PROTOCOL_CHAT, body=body, now=NOW, root=env,
+        endpoints={"codearts": [CHAT_URL, MSG_URL], "workbuddy": [CHAT_URL, MSG_URL]},
+        rpm_limits={}, stamps={},
+        ledger=_ledger(_row(SEAT_A), _row(SEAT_B)),
+        scopes={})
+    assert outcome.status == 422, "上游「不吃图」原样透传"
+    assert len(forward.calls) == 1, "bad_request 不换号、也不改 body 重试"
+    assert forward.calls[0][3] == body, "payload 逐字节没被改写"
+    assert forward.calls[0][1] == SEAT_A, "只碰第一个候选"
 
 
 def test_auth_failure_switches_without_sinking(env: Path) -> None:
@@ -699,6 +739,12 @@ def test_http_only_four_paths(start_server: Any) -> None:
         assert "GET" in (_header(headers, "Allow") or "")
     status, _, _ = _request(port, "POST", "/v1/models", body={"model": MODEL})
     assert status == 405
+    # 卡 A373（F94）：图像路径一个都不认 —— magpie 那两个生成面 + 它自己的 vision MCP 面。
+    for path in ("/v1/images/generations", "/v1/images/edits", "/mcp/magpie/vision"):
+        status, _, _ = _request(port, "POST", path, body={"model": MODEL})
+        assert status == 404, path
+    assert tuple(gateway.PATHS) == ("/v1/chat/completions", "/v1/messages",
+                                    "/v1/models", "/v1/pool/routes"), "四条路径，一个都不多"
 
 
 def test_http_origin_whitelist(start_server: Any) -> None:

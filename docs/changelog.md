@@ -41,6 +41,11 @@
 - 默认关，**关着时输出逐字节不变**（判据 1 由 `test_bare_ids_off_is_byte_for_byte_today` 钉住）；HTTP 面只信服务建好时那一刻的 env 读数，不信请求里的任何东西。
 - `tests/test_pool_gateway.py` 加 7 条钉子（默认关 / env 名只声明一次只读一次 / 关着逐字节不变 / main 真的把 env 传下去 / 开着追加在批准集之后 / 重名计数 / 裸 id 不接请求）。
 - `docs/subsystems/pool/模型与号池.md` 续写 §8（开关名 + 只发布读数不接请求 + 重名不列规则），`docs/subsystems/pool/modules.toml` 的 gateway 条 cli 段补 env 名。
+## 2026-11-20 T-AG661 F94 图像识别替身 seer：判 SKIP_BY_REDLINE，产品码一字不改只加钉
+- tests/test_pool_gateway.py 四处追加：三条图像路径各 POST 断言 404 + PATHS 仍四值；classify 的 parametrize 加三条「模型不吃图」措辞；新建 test_image_request_is_one_forward_call 绕过 _run() 直接调 route_once，断言 body 逐字节未被改写且只发一次。
+- tests/test_model_registry.py 新建 test_model_entry_has_no_modality_dimension：字段集恰七项、逐条 not hasattr(images|vision|modalities)。
+- 不移植有据可查：seer / refuseSight / seenBody / textOnly 在 tools/ 与 scripts/ 零命中，PATHS 只有四条。
+- 表 B（不做/归谁/证据）第 8 行不由这张卡提交：README 是现算文档，落地链 ⓪ 会把它回退到 HEAD，手改活不到 ⑤′ ⇒ 改由主树 docs 提交补。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

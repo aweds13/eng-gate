@@ -1,0 +1,15 @@
+[entries."T-AG661"]
+id = "T-AG661"
+title = "F94图像识别替身seer：判SKIP_BY_REDLINE，产品码一字不改只加钉"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_gateway.py",
+  "file:tests/test_model_registry.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_gateway.py::test_image_request_is_one_forward_call",
+  "test:test_model_registry.py::test_model_entry_has_no_modality_dimension",
+  "test:test_pool_gateway.py::test_http_only_four_paths",
+]
+gaps = "1. 图像拒收的判词只按状态码分类：classify 对「模型不吃图」仍只看 400/415/422，不看返回体里有没有 image 字样 —— 本卡只钉住这份现状，不搬 magpie 的 seenBody 改写。指针 tools/pool/gateway.py2. 本卡是 SKIP_BY_REDLINE：产品码一个字节都没改，只在 tests 与 README 表 B 加钉；三根支柱（seenBody 改写、imageRefusedWords、refuseSight 后同候选重试）全判不移植。指针 tests/test_pool_gateway.py3. 表 B 那一行走不了这张卡：docs/subsystems/pool/README.md 在落地链的回退名单（RECOUNT_DOCS）里，⓪ 步会先把它 checkout 回 HEAD ⇒ 卡树里手改的表 B 行会被抹掉，落地链也不会替你写回来（③.5 只重算 pool-margin 标记之间，表 B 在标记外）。所以本卡只交测试钉子，表 B 的第 8 行由随后的主树 docs 提交补（体例同 796ea840 队列卡数修正）。指针 tools/pool/landing.py"
+

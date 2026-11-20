@@ -12784,3 +12784,18 @@ evidence = [
   "test:test_pool_gateway.py::test_bare_ids_are_listed_but_not_routed",
 ]
 gaps = "1. 裸 id 只发布、不接请求：`bare_ids=True` 时 `/v1/models` 会多出尾段唯一的裸 id 行，但请求侧仍按 `provider/model` 认 —— 客户端若拿裸 id 直接发请求，走的还是后端既有的裸名解析，**不是**这一圈新行。指针 tools/pool/gateway.py2. 重名不列只报数：两条 `pa/x` 与 `pb/x` 指向不同 entry 时裸 id `x` 一条都不追加，只在 note 里写「有 N 条裸 id 因重名未列」—— 这个 N 今天没有任何读者，是留给人看的读数。指针 tools/pool/gateway.py3. `GET /v1/models/{id}` 仍按完整 id 认，裸 id 认不出就是 404；「按裸 id 认单个模型」与「请求侧按裸名路由」是明写的决定（不做），不是欠账。指针 docs/subsystems/pool/模型与号池.md"
+
+[entries."T-AG661"]
+id = "T-AG661"
+title = "F94图像识别替身seer：判SKIP_BY_REDLINE，产品码一字不改只加钉"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_gateway.py",
+  "file:tests/test_model_registry.py",
+  "file:docs/subsystems/pool/README.md",
+  "test:test_pool_gateway.py::test_image_request_is_one_forward_call",
+  "test:test_model_registry.py::test_model_entry_has_no_modality_dimension",
+  "test:test_pool_gateway.py::test_http_only_four_paths",
+]
+gaps = "1. 图像拒收的判词只按状态码分类：classify 对「模型不吃图」仍只看 400/415/422，不看返回体里有没有 image 字样 —— 本卡只钉住这份现状，不搬 magpie 的 seenBody 改写。指针 tools/pool/gateway.py2. 本卡是 SKIP_BY_REDLINE：产品码一个字节都没改，只在 tests 与 README 表 B 加钉；三根支柱（seenBody 改写、imageRefusedWords、refuseSight 后同候选重试）全判不移植。指针 tests/test_pool_gateway.py3. 表 B 那一行走不了这张卡：docs/subsystems/pool/README.md 在落地链的回退名单（RECOUNT_DOCS）里，⓪ 步会先把它 checkout 回 HEAD ⇒ 卡树里手改的表 B 行会被抹掉，落地链也不会替你写回来（③.5 只重算 pool-margin 标记之间，表 B 在标记外）。所以本卡只交测试钉子，表 B 的第 8 行由随后的主树 docs 提交补（体例同 796ea840 队列卡数修正）。指针 tools/pool/landing.py"

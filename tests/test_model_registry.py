@@ -518,3 +518,23 @@ def test_unknown_max_output_has_exactly_one_definition() -> None:
     toml = (ROOT / "tools" / "pool" / "model-registry.toml").read_text(encoding="utf-8")
     assert toml.count(literal) == 0, "toml 里不许抄这个数冒充「已知」"
     assert mr.UNKNOWN_MAX_OUTPUT == 16 << 10, "常量值就是它（改它等于改全仓的未知口径）"
+
+
+def test_model_entry_has_no_modality_dimension() -> None:
+    """卡 A373（F94）：ModelEntry 只有「窗口」维，没有「模态」维。
+
+    seer（图像识别替身）的三根支柱都要一个「这个号到底吃不吃图」的位；本仓**刻意不设**这个位
+    —— 不按厂商措辞判拒图（classify 只看状态码），也就不需要知道谁能吃图。
+    context_window / max_output 是合法属性维（卡 E143），不是先例：窗口能拦截，模态只能猜。
+    加一条 images: bool，紧接着就会有「哪些池填了它、谁读它、填错了怎么办」—— 那就是 seer 的入口。
+    """
+    import dataclasses
+
+    names = {f.name for f in dataclasses.fields(mr.ModelEntry)}
+    assert names == {"alias", "pool", "id", "default", "note", "context_window",
+                     "max_output"}, f"字段集变了：{sorted(names)}"
+    entries = load_registry()
+    assert entries, "注册表是空的 ⇒ 下面那个循环什么都没查"
+    for entry in entries:
+        for attr in ("images", "vision", "modalities"):
+            assert not hasattr(entry, attr), f"{entry.alias} 上冒出了模态维 {attr}"
