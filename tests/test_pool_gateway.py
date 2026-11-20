@@ -66,6 +66,7 @@ TOKEN = "gateway-unit-token"
 MODEL = "huaweicloud-maas/GLM-5.2"
 CHAT_URL = "https://chat.example.test/v1/chat/completions"
 MSG_URL = "https://chat.example.test/v1/messages"
+SEARCH_URL = "https://search.example.test/search"
 SEAT_A = "codearts-1"
 SEAT_B = "workbuddy-1"
 NOW = dt.datetime(2026, 11, 9, 12, 0, 0, tzinfo=dt.timezone.utc)
@@ -1300,3 +1301,87 @@ def test_f36_port_8766_is_declared_once_and_not_orchestrated() -> None:
     assert "gateway" not in stack, "网关被编排进 stack.py 了：先重取读数，再改这条"
     lock = (ROOT / "gates" / "diag" / "gate_lock.py").read_text(encoding="utf-8")
     assert "8766" not in lock, "8766 进了门禁端口表：两个东西会抢同一个端口"
+
+# =========================================== 卡 A372（T-AG658）：rotate 在网关里真转起来
+
+
+def test_order_rotates_when_the_caller_holds_the_counter(env: Path) -> None:
+    """判据 1(a)：`_order` 拿到调用方那份计数才会转 —— 连调三次得三道不同的首项。
+
+    改前：`_order` 不把 state 传下去 ⇒ `route.rotate` 每次都新建 book ⇒ `so_far` 恒 0
+    ⇒ 恒等排列（缺口 1）。这条钉的就是「谁传」这一半。
+    """
+    rows = (_row(SEAT_A), _row(SEAT_B), _row("codearts-2"))
+    turns: dict[str, int] = {}
+    got = [gateway._order(rows, "rotate", pool="codebuddy", turns=turns) for _ in range(3)]
+    assert got == [[0, 1, 2], [1, 2, 0], [2, 0, 1]], got
+    assert turns == {"codebuddy": 3}, turns
+    # 不传计数 ⇒ 退回原列顺序（既有行为：默认路径一个字都没改）
+    assert gateway._order(rows, "rotate", pool="codebuddy") == [0, 1, 2]
+    # order 不看计数：调多少次都是同一个排列
+    assert gateway._order(rows, "order", pool="codebuddy", turns={}) == [0, 1, 2]
+
+
+def test_server_turns_make_two_rounds_start_on_different_seats(env: Path) -> None:
+    """判据 1(b)：端到端 —— `build_server(routing="rotate")` 起的服务，两轮从不同号起步。
+
+    ★ 不真发 HTTP：`turns` 就挂在 `_Server` 上（裁决 5），`route_once` 从那儿取；
+      这里直接拿 server 的两件（`routing` / `turns`）跑两轮，等价于两条请求。
+    """
+    server = gateway.build_server(_Forward(_ok()), host="127.0.0.1", port=0, token=TOKEN,
+                                  routing="rotate", pool="codebuddy", root=env)
+    try:
+        assert server.routing == "rotate"
+        assert server.turns == {}
+        seen = []
+        for _ in range(2):
+            out = gateway.route_once(
+                pool="codebuddy", model=MODEL, caller="alice", forward=_Forward(_ok()),
+                protocol=gateway.PROTOCOL_CHAT, routing=server.routing,
+                body=b'{"model":"x"}', now=NOW, root=env,
+                endpoints={"codearts": [CHAT_URL], "workbuddy": [CHAT_URL]},
+                rpm_limits={}, stamps={},
+                ledger=_ledger(_row(SEAT_A), _row(SEAT_B)), scopes={},
+                turns=server.turns)
+            assert out.status == 200
+            seen.append(out.attempts[0].seat)  # 本仓的 Attempt.seat 就是号的 id 串
+        assert seen == [SEAT_A, SEAT_B], seen
+        assert server.turns == {"codebuddy": 2}, server.turns
+    finally:
+        server.server_close()
+
+
+def test_strategies_that_do_not_rotate_are_unaffected(env: Path) -> None:
+    """判据 1 的护栏：给 turns 只影响 rotate —— `order` / `smart` 的读数一字不变。"""
+    rows = (_row(SEAT_A), _row(SEAT_B), _row("codearts-2"))
+    turns: dict[str, int] = {}
+    for name in ("order", "smart", "usage"):
+        first = gateway._order(rows, name, pool="codebuddy", turns=turns)
+        second = gateway._order(rows, name, pool="codebuddy", turns=turns)
+        assert first == second, name
+    assert turns == {}, "不轮转的策略不许偷偷写计数"
+
+
+# =========================================== 卡 A372：搜索路径的两条出口（可读的那一档）
+
+
+def test_search_protocol_stops_at_the_first_non_refusal(env: Path) -> None:
+    """判据 4(a)：搜索路径第一把 key 回 500 ⇒ attempts 长 1（就地结束，原因可读）。"""
+    forward = _Forward(gateway.Reply(status=500, headers={}, body=b'{"error":"boom"}'), _ok())
+    out = _run(env, forward, protocol=gateway.PROTOCOL_SEARCH,
+               rows=(_row(SEAT_A), _row(SEAT_B)), endpoints={"codearts": [SEARCH_URL]})
+    assert len(out.attempts) == 1, out.attempts
+    assert len(forward.calls) == 1, forward.calls
+    assert out.status == 500, "上游 500 原样透传（不改成 502）"
+    assert "不是拒绝类" in out.stop_reason, out.stop_reason
+
+
+def test_chat_protocol_still_switches_on_the_same_500(env: Path) -> None:
+    """判据 4(b)：聊天路径同一个 500 ⇒ attempts 长 2（裁决 1：换号语义一个字节不动）。"""
+    boom = gateway.Reply(status=500, headers={}, body=b'{"error":"boom"}')
+    forward = _Forward(boom, boom)
+    out = _run(env, forward, rows=(_row(SEAT_A), _row(SEAT_B)),
+               endpoints={"codearts": [CHAT_URL]})
+    assert len(out.attempts) == 2, out.attempts
+    assert len(forward.calls) == 2
+    assert out.stop_reason == ""

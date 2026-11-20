@@ -1,0 +1,41 @@
+# 搜索 API 的 vendor 表（卡 A372 · F56）—— 只登记「怎么找到这家、key 放哪里、哪些码算没钱了」。
+#
+# ★ 为什么不塞进 tools/pool/platforms.toml（立卡人裁决 2）：那份表的 schema 是
+#   base_urls / chat_urls / token_env，讲的是「这个平台的 chat 端点在哪儿」；搜索 vendor 要的是
+#   「搜索入口 + key 是不是必需 + 哪几个状态码算余额耗尽」—— 塞进去要扩 schema 又要动既有 9 段，
+#   而本卡不许碰既有段。所以单开一份，体例照 tools/pool/rpm.toml / tools/pool/model-registry.toml。
+#
+# 键的口径（只这三个合法键，多一个工具就报错）：
+#   base                —— 搜索入口 URL（空 = 还没登记，调用方不许猜、不许拼）
+#   key_env             —— 这个 vendor 的 key 从哪个环境变量读（空 = 不用 key，例如自建 searxng）
+#   key_required        —— key 是不是必需（false ⇒ 没有 key 也能用，不许因此判它不可用）
+#   out_of_credit_status —— 除 402 之外，这家自己用来表示「没钱了」的状态码（照 magpie 的
+#                          `vendor == "tavily" && (status == 432 || status == 433)`）
+#
+# ★ 表里**没有**任何 rest 秒数：rest 的数字只有一份真源（tools/pool_quota.py 的搜索档），
+#   本表抄一份就等于制造第二份判据（判据 6）。
+
+[vendor.tavily]
+base = "https://api.tavily.com/search"
+key_env = "TAVILY_API_KEY"
+key_required = true
+out_of_credit_status = [432, 433]
+
+[vendor.brave]
+base = "https://api.search.brave.com/res/v1/web/search"
+key_env = "BRAVE_API_KEY"
+key_required = true
+out_of_credit_status = []
+
+[vendor.serper]
+base = "https://google.serper.dev/search"
+key_env = "SERPER_API_KEY"
+key_required = true
+out_of_credit_status = []
+
+[vendor.searxng]
+# 自建实例：地址由部署方填，key 不是必需（本表不写死任何人的内网地址）。
+base = ""
+key_env = ""
+key_required = false
+out_of_credit_status = []

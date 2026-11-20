@@ -773,6 +773,29 @@ def mask(value: str) -> str:
     return masked
 
 
+#: 搜索 API key 的明文前缀（magpie `internal/provider/search_api.go:100-106` 只认这一个）。
+SEARCH_KEY_PREFIX = "tvly-"
+#: 打码时留下的尾巴长度。
+SEARCH_KEY_TAIL = 4
+#: 够长才打码的阈值：16 = 前缀 5 + 至少 11 位身子（照 magpie `len(k) >= 16`）。
+SEARCH_KEY_MIN = 16
+
+
+def mask_search_key(key: str) -> str:
+    """搜索 API key 打码：`tvly-` 且够长 ⇒ `tvly-…` + 后 4 位；其余退回既有 `mask()`。
+
+    ★ 为什么不能直接用 `mask()`：它的 `SECRET_RE` 只认 `sk-/ak-/ghp-/xoxb-`，
+      `tvly-` 前缀会**原样返回**（卡 A372 实测）；`mask_token()` 只认三段式 JWT，
+      对 `tvly-…` 一律回 `"<token>"` 等于什么都没说。所以搜索这条路单开一个入口，
+      **不改** `mask()` / `mask_token()` 的既有行为（`tests/test_renew_lock.py:203-231` 钉着）。
+    """
+    if not isinstance(key, str) or not key:
+        return mask(key)
+    if key.startswith(SEARCH_KEY_PREFIX) and len(key) >= SEARCH_KEY_MIN:
+        return SEARCH_KEY_PREFIX + "…" + key[-SEARCH_KEY_TAIL:]
+    return mask(key)
+
+
 def _tombstoned(acc: dict) -> bool:
     return bool(acc.get("deleted_at")) or acc.get("state") == "disabled"
 

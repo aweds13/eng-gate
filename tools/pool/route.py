@@ -452,6 +452,19 @@ def ordered(seats: Sequence[Seat]) -> list[int]:
     return identity(len(seats))
 
 
+def resting_last(order: Sequence[int], seats: Sequence[Seat]) -> list[int]:
+    """`resting` 的座沉到最后（稳定排序，其余保序）—— 卡 A372 的那一处「resting 标注位」。
+
+    ★ 语义照抄原件 `searchKeyOrder`（`internal/gateway/search_keys.go:109-129`）：
+      「正在休息的 key **不丢弃**，只是排在不休息的之后」—— 丢掉它等于把一把还能用的
+      key 永久拉黑。★ 实现在这里只有一份：`smart_order` 与 `rotate` 都调它，谁都不许
+      再写第二份「awake + asleep」。
+    """
+    awake = [i for i in order if not seats[i].resting]
+    asleep = [i for i in order if seats[i].resting]
+    return awake + asleep
+
+
 def rotate(seats: Sequence[Seat], *, pool: str, turns: dict[str, int] | None = None) -> list[int]:
     """每个请求从上一个的下一位起转（原件 `Rotate`，`strategies.go:190-196`）。
 
@@ -459,6 +472,9 @@ def rotate(seats: Sequence[Seat], *, pool: str, turns: dict[str, int] | None = N
     计数按 pool 分开（`turns` 是 `pool → 次数`）。`n == 0` ⇒ `[]`（原件这里会除零 panic；
     pool 侧空池就回空，不抛）。
     ★ `turns` 由调用方持有，本函数不落盘。
+    ★ 卡 A372：转完再把 `resting` 的座沉到最后（`resting_last`）—— 搜索 key 的 rest 就靠
+      这一个标注位落地，不用另写排序。生产侧聊天路径没人置 `resting=True`
+      （`grep -rn 'resting=' tools/` 只命中断言），所以这一句对既有行为是恒等的。
     """
     n = len(seats)
     if n == 0:
@@ -468,7 +484,7 @@ def rotate(seats: Sequence[Seat], *, pool: str, turns: dict[str, int] | None = N
     book[pool] = so_far + 1
     start = so_far % n
     idx = identity(n)
-    return idx[start:] + idx[:start]
+    return resting_last(idx[start:] + idx[:start], seats)
 
 
 def least_used(seats: Sequence[Seat]) -> list[int]:
@@ -764,10 +780,8 @@ def smart_order(seats: Sequence[Seat]) -> list[int]:
     # 连数都没有的沉底 —— 与 `least_used` 的 `_share_key` 同一口径。
     unknown.sort(key=lambda i: _share_key(seats[i]))
     order = fine + low + spent + unknown
-    # resting 沉底（原件的 Sink 语义；只排位，不写盘）。
-    awake = [i for i in order if not seats[i].resting]
-    asleep = [i for i in order if seats[i].resting]
-    return awake + asleep
+    # resting 沉底（原件的 Sink 语义；只排位，不写盘）—— 实现只有 `resting_last` 一份。
+    return resting_last(order, seats)
 
 
 def apply_order(order: Sequence[int], n: int) -> list[int]:

@@ -12722,3 +12722,22 @@ evidence = [
   "file:复盘/卡/卡A379-F60-MCP-hub-判SKIP_NOT_APPLICABLE.md",
 ]
 gaps = "1. 判据 1 的验收 grep 按字面跑会**自撞钉子文件自己**：那四个词就写在 `tests/test_pool_mcp_no_hub.py` 的 :44 词表与 :49/:81 两处 docstring 里；判据本身的扫描根是 tools/ src/ scripts/、不含 tests/，排除钉子文件后 0 命中。指针 tests/test_pool_mcp_no_hub.py2. 规格的变异 M1 写「加 MCPHUB = 「hub」（或 class MCPHub）」；判据词表大小写敏感，全大写 MCPHUB 咬不住，变异用了括号里的 MCPHub 写法。这是与规格字面的唯一偏差。指针 gates/diag/_rev_379.py3. changelog 片段不由本卡产出：手写一份 `docs/changelog.d/T-AG667.md` 会让 `tools/sync_docs.py --check` 当场红（全量门在 scripts/run_gates.py:1152 的 docs_fragments_problems 里无条件跑它），片段由落地链 ② 生成。指针 tools/pool/stage_card.py4. `gates/diag/_magpie_scope.md`:68 那行仍写 PORT —— 改判定表不是本卡（A379）的活，两张纸暂时漂着。"
+
+[entries."T-AG658"]
+id = "T-AG658"
+title = "F56搜索API多key轮换：被拒才换下一个、各自有rest"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tools/pool/route.py",
+  "file:tools/pool_quota.py",
+  "file:tools/pool/search.py",
+  "file:tools/pool/search-vendors.toml",
+  "file:tools/pool_accounts.py",
+  "text:tools/pool_quota.py::def search_key_id(vendor: str, key: str) -> str:",
+  "test:test_pool_search_keys.py::test_search_path_switches_key_on_a_refusal",
+  "test:test_pool_search_keys.py::test_order_rotates_and_keeps_resting_keys_last",
+  "test:test_pool_gateway.py::test_search_protocol_stops_at_the_first_non_refusal",
+]
+gaps = "1. 搜索腿今天没有 HTTP 入口：只做出 route_once(protocol=PROTOCOL_SEARCH) 的注入形态，gateway 的四个 PATHS 一个都没加 ⇒ 现在从网络面还调不到搜索 key 轮换。指针 tools/pool/gateway.py2. key 身份只有 8 字节 hex（sha256[:16]）⇒ 碰撞面比全长摘要大；只用于识别同一个 key，不当凭据也不写进日志。指针 tools/pool_quota.py3. tavily 的 429 带 Retry-After: 3600 会被 SEARCH_RATE_MAX_S=600 夹到 600 —— 厂商说的停放时长与本仓上界不一致，取本仓上界。指针 tools/pool_quota.py"

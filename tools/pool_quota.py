@@ -44,6 +44,7 @@ r"""额度状态按钟表算（卡 201 · T-G303）—— 429 不许凭记忆，
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -102,6 +103,18 @@ MAX_QUOTA_REST_MIN = 8 * 24 * 60     # :212 MaxQuotaRest（分钟，= 8 天）
 #: 五种失败分类（`routing.go:288-299` 的子集）。`auth` 在 `restAfterMarked` 的 switch 里
 #: 没有自己的 case，落 `default` ⇒ 与 `other` 同一条退避路（但**不**享 `off`，见 `:1182`）。
 WHY_KINDS = ("credit", "quota", "rate", "other", "auth")
+
+# ---- 搜索 API 的 rest 三档（卡 A372 · F56）—— 照 magpie `search_keys.go:50-56`
+# 常量原件：`internal/gateway/search_keys.go` 的 rateLimitRest / rateLimitRestMin /
+# rateLimitRestMax / turnedAwayRest / outOfCreditRest。**与上面四真值并存、互不改写**：
+# 上面那 11 个数字一个都不动，搜索这条路只在 `search_vendor` 给出来时才走这一档。
+SEARCH_TURNED_AWAY_S = 10 * 60       # turnedAwayRest —— 401/403：人家不让你来
+SEARCH_OUT_OF_CREDIT_S = 60 * 60     # outOfCreditRest —— 402 / tavily 432·433：没钱了
+SEARCH_RATE_REST_S = 60              # rateLimitRest —— 限流没说何时回来
+SEARCH_RATE_MIN_S = 30               # rateLimitRestMin —— 限流下界（RA 再小也不早于它）
+SEARCH_RATE_MAX_S = 10 * 60          # rateLimitRestMax —— 限流上界
+#: 搜索路径算「拒绝」的状态码（magpie `search_api.go:159-160` `if !refused { break }`）。
+SEARCH_REFUSED_STATUS = (401, 402, 403, 429, 432, 433)
 
 # ---- 分类正则：只搬 `failure()`（`routing.go:391-444`）用到的那几条，pattern 逐字照抄。
 _CREDIT_RE = re.compile(
@@ -290,13 +303,51 @@ def read_record(card: str, model: str, *, root: Path = ROOT) -> dict[str, Any] |
     return data.get("cards", {}).get(card, {}).get(model)
 
 
+def search_key_id(vendor: str, key: str) -> str:
+    """搜索 API key 的身份：`<vendor> <sha256(key) 前 8 字节的 hex>`（卡 A372 · 判据 2）。
+
+    照 magpie `internal/gateway/search_keys.go:41-44` 的 `searchKeyID`：
+    `return vendor + " " + hex.EncodeToString(sum[:8])`（8 字节 = 16 个十六进制字符）。
+
+    ★ 为什么不是明文：rest 记录要落盘（`gates/diag/quota-state.json`），
+      key 明文一个字都不许进文件 —— 落盘字节里查得到 key 就是泄漏（判据 2(b)）。
+    ★ 为什么必须是哈希而不是编号：同一个 key 跨进程要算出同一个 id。
+    ★ **全仓只有这一处算 key 身份**（`tools/pool/search.py` 不许再算一遍，判据 6(b)）。
+    """
+    if not isinstance(vendor, str) or not vendor:
+        raise ValueError(f"vendor 必须是非空字符串，拿到 {vendor!r}")
+    if not isinstance(key, str) or not key:
+        raise ValueError("key 必须是非空字符串（空 key 打不出身份，也不许拿空串当身份）")
+    return f"{vendor} {hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
+
+
+def read_search_records(model: str, *, root: Path = ROOT) -> list[dict[str, Any]]:
+    """某个 model 名下的搜索 key 记录，一个 key 一条（按 `key_id` 排序）。
+
+    ★ 与 `cards[card][model]` 那一格**互不相干**：那张表是「同卡同模型覆盖」，
+      这里是「同 model 的不同 key 各占一格、谁也不覆盖谁」（卡 A372 判据 2(a)）。
+    """
+    data = _load(root)
+    bucket = data.get("search", {}).get(model, {})
+    if not isinstance(bucket, dict):
+        return []
+    return [bucket[k] for k in sorted(bucket)]
+
+
 def record(*, card: str, model: str, pool: str, kind: str,
            reset_raw: str, source_log: str | None = None, source_line: int | None = None,
+           vendor: str | None = None, key_id: str | None = None,
+           rest: dict[str, Any] | None = None,
            root: Path = ROOT) -> dict[str, Any]:
     """把一次 429 落成一条记录 —— 同卡同模型覆盖。
 
     `reset_at` 用 ISO-8601；**解析不出来就写 `null` 并保留 `reset_raw`**（不许拿别的数冒充）。
     `recorded_at` = 真实现在（ISO-8601，aware）。
+
+    ★ 卡 A372：给了 `vendor` + `key_id`（由 `search_key_id()` 算出来）时，**另外**往
+      `data["search"][model][key_id]` 写一条 —— 搜索路径上一个 model 可以有多个 key，
+      各自 rest、互不覆盖。旧调用（`tools/wb_dispatch.py` / `tools/pool/gateway.py` 与
+      `tests/test_pool_rest.py` 那批）一个参数都不传 ⇒ 走的还是原来那一条路，行为不变。
     """
     reset_dt = parse_reset(reset_raw)
     reset_at = reset_dt.isoformat() if reset_dt is not None else None
@@ -314,6 +365,19 @@ def record(*, card: str, model: str, pool: str, kind: str,
     data = _load(root)
     cards = data.setdefault("cards", {})
     cards.setdefault(card, {})[model] = rec
+    if vendor is not None and key_id is not None:
+        if not isinstance(vendor, str) or not vendor:
+            raise ValueError(f"vendor 必须是非空字符串，拿到 {vendor!r}")
+        if not isinstance(key_id, str) or not key_id:
+            raise ValueError(f"key_id 必须是非空字符串，拿到 {key_id!r}")
+        if not key_id.startswith(f"{vendor} "):
+            raise ValueError(f"key_id 必须由 search_key_id({vendor!r}, key) 算出来"
+                             f"，拿到 {key_id!r}")
+        srec = dict(rec)
+        srec["vendor"] = vendor
+        srec["key_id"] = key_id
+        srec["rest"] = dict(rest or {})
+        data.setdefault("search", {}).setdefault(model, {})[key_id] = srec
     _save(data, root)
     return rec
 
@@ -396,6 +460,52 @@ def _longest_for(full_until: str | None, now_dt: datetime) -> int:
     return LONGEST_QUOTA_S
 
 
+def search_rest_for(
+    *,
+    vendor: str,
+    status: int,
+    retry_after_s: int | None = None,
+    reset_at: str | None = None,
+    now: datetime | str | None = None,
+) -> dict[str, Any]:
+    """搜索路径的 rest —— magpie `searchRestFor`（`internal/gateway/search_keys.go:62-76`）。
+
+    ★ **搜索档只有这一份数字表**：`rest_after(..., search_vendor=...)` 从这里取，
+      `tools/pool/search.py` 也调这里 —— 判据 6(c) 明写「search.py 里不许出现 600/3600/1800
+      字面量」，靠的就是这个函数。
+    ★ 与 `rest_after` 的四真值**并存互不改写**：上面那 11 个常量本函数一个都不读、不改。
+    ★ **纯函数**：不读文件、不联网、不睡、不看真实钟表（`now` 由调用方注入）。
+    """
+    now_dt = _resolve_now(now)
+    why_hint = "auth" if status in (401, 403) else "other"
+    if status in (401, 403):
+        # :64-65 —— 人家不让你来：turnedAwayRest。
+        seconds, by = SEARCH_TURNED_AWAY_S, "turned-away"
+    elif status == 402 or (vendor == "tavily" and status in (432, 433)):
+        # :66-69 —— 没钱了（402；tavily 自己的 432/433 也是同一件事）。
+        seconds, by, why_hint = SEARCH_OUT_OF_CREDIT_S, "out-of-credit", "credit"
+    elif status not in SEARCH_REFUSED_STATUS:
+        # 判据 4 —— 不是被拒就不换下一个 key，也就没有 rest 可言。
+        seconds, by = 0, "not-refused"
+    else:
+        # :70-76 —— 限流：供应商说了多久就听它的，但夹在 [30s, 10min]。
+        said = retry_after_s
+        if said is None:
+            said_dt = parse_reset(reset_at)
+            if said_dt is not None:
+                said = int((_to_aware(said_dt) - now_dt).total_seconds())
+        d = SEARCH_RATE_REST_S if said is None else int(said)
+        seconds = min(max(d, SEARCH_RATE_MIN_S), SEARCH_RATE_MAX_S)
+        by, why_hint = "rate-limited", "rate"
+    return {
+        "seconds": int(seconds),
+        "by": by,
+        "why": why_hint,
+        "rest_until": (now_dt + timedelta(seconds=int(seconds))).isoformat(),
+        "capped": bool(seconds >= SEARCH_RATE_MAX_S),
+    }
+
+
 def rest_after(
     *,
     why: str,
@@ -406,6 +516,8 @@ def rest_after(
     failures: int = 1,
     full_until: str | None = None,
     now: datetime | str | None = None,
+    search_vendor: str | None = None,
+    retry_after_s: int | None = None,
 ) -> dict[str, Any]:
     """一次失败该歇多久 → `{"seconds", "by", "why", "rest_until", "capped"}`。
 
@@ -425,6 +537,17 @@ def rest_after(
     `by` 取值照 magpie：`off` / `credit` / `quota` / `resets` / `retry-after` / `backoff` /
     `cooldown`（`credits` / `window` / `restricted` / `verify` 属于条件更足的通道，本卡不搬；
     月窗口在本函数里表现为「上限换 35 天」，`by` 仍是 `resets`）。
+
+    ★ **搜索档（卡 A372 · F56）**：给了 `search_vendor` 就整段换一套数字 ——
+      照 magpie `internal/gateway/search_keys.go:62-76` 的 `searchRestFor`，**上面四真值的
+      11 个常量一个都不参与**（并发并存，互不改写）：
+        · 401 / 403 ⇒ `SEARCH_TURNED_AWAY_S`，`by="turned-away"`；
+        · 402，或 vendor 是 `tavily` 且 432 / 433 ⇒ `SEARCH_OUT_OF_CREDIT_S`，`by="out-of-credit"`；
+        · 其余（拒绝类）⇒ `min(max(d, SEARCH_RATE_MIN_S), SEARCH_RATE_MAX_S)`，`by="rate-limited"`，
+          `d` 依次取 `retry_after_s`、`reset_at` 算出来的秒数、`SEARCH_RATE_REST_S`，
+          没说就 1 分钟；
+        · **非拒绝类**（500 / 超时 / other 等 `SEARCH_REFUSED_STATUS` 之外）⇒ `seconds=0`、
+          `by="not-refused"` —— 搜索路径「不是被拒就不换下一个」，也就没有 rest 可言（判据 4）。
     """
     if why not in WHY_KINDS:
         raise ValueError(f"不认的失败分类：{why!r}")
@@ -434,6 +557,15 @@ def rest_after(
             f"不是 {rest_cap_s} 秒"
         )
     now_dt = _resolve_now(now)
+    if search_vendor is not None:
+        # 卡 A372 —— 搜索档：整段换一套数字（上面 11 个常量一个都不参与）。
+        return search_rest_for(
+            vendor=search_vendor,
+            status=int(status),
+            retry_after_s=retry_after_s,
+            reset_at=reset_at,
+            now=now_dt,
+        )
     n = max(int(failures), 1)
     seconds, by, capped = 0, "off", False
     if why == "credit":

@@ -300,3 +300,12 @@ cli = "无（纯函数；被 `pool.web_fetch` 与后续卡引用）"
 name = "web_fetch.py"
 duty = "按用户给的 URL 取一页并折成文本：三分类（html / text / 拒收）、HTML 变 Markdown 六件事、按 rune 切的字符窗口（默认 20000 / 上限 100000）；出网与解析全部由注入的 `fetch` / `resolve` 承担，**本模块零出网库**，每跳重定向都重新判地址"
 cli = "无（判据在 `tests/test_pool_web_fetch.py`；未接生产路径，接面是另一张卡）"
+[[module]]
+name = "search.py"
+duty = "搜索 API 的 vendor 表 / key 串解析 / 拒绝 → 七值三件事（卡 A372 · F56）：轮换调 `route.rotate`（计数由调用方持有）、rest 调 `pool_quota.rest_after` 的搜索档、沉底调 `pool_sink`、打码调 `pool_accounts.mask_search_key` —— 本模块不含任何 rest 秒数与分类正则，也不自己算 key 身份"
+cli = "无（被搜索接入方调）"
+
+[[module]]
+name = "search-vendors.toml"
+duty = "搜索 vendor 登记表（tavily / brave / serper / searxng）：base、key_env、key 是否必需、各家自己的「余额耗尽」状态码；**没有 rest 秒数**（数字只有 `pool_quota` 一份真源），也不含任何凭据明文"
+cli = "无（被 `pool.search` 读）"

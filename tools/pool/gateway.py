@@ -95,6 +95,10 @@ CHUNK_BYTES = 64 * 1024
 DEFAULT_PROTOCOL = "chat"
 PROTOCOL_CHAT = "chat"
 PROTOCOL_MESSAGES = "messages"
+#: 卡 A372（F56）：搜索 API 的协议名。★ 它**不是**一条 HTTP 路径 —— `PATHS` 仍然是四条，
+#: 一个都不多（`tests/test_pool_gateway.py` 钉着）；搜索只在 `route_once` 被注入这个
+#: protocol 时才走到「只有被拒才换下一个 key」那一档（立卡人裁决 1）。
+PROTOCOL_SEARCH = "search"
 #: 四条路径，一个都不多（不开 /v1/responses、Gemini、Ollama 兼容、管理面）。
 PATHS: dict[str, tuple[str, str]] = {
     "/v1/chat/completions": ("POST", PROTOCOL_CHAT),
@@ -242,7 +246,14 @@ def endpoint_protocol(url: str) -> str:
         path = urlsplit(str(url)).path.rstrip("/").lower()
     except ValueError:
         return ""
-    return {"/v1/chat/completions": PROTOCOL_CHAT, "/v1/messages": PROTOCOL_MESSAGES}.get(path, "")
+    route = {"/v1/chat/completions": PROTOCOL_CHAT, "/v1/messages": PROTOCOL_MESSAGES}.get(path, "")
+    if route:
+        return route
+    # 卡 A372：搜索端点只认尾巴（tavily / serper 是 `/search`，brave 是 `/res/v1/web/search`）。
+    # ★ 仍然只是「读已登记的串」，不拿 base 拼路径、不发请求（pick_endpoint 的硬边界不变）。
+    if path.endswith("/search"):
+        return PROTOCOL_SEARCH
+    return ""
 
 
 def pick_endpoint(urls: Sequence[str] | None, protocol: str, *,
@@ -308,6 +319,9 @@ class Outcome:
     chunks: Iterable[bytes] | None = None
     attempts: tuple[Attempt, ...] = ()
     logged: bool = False
+    #: 卡 A372（判据 4）：为什么**没有**继续换下一个候选。只有搜索路径会填
+    #: （非拒绝类错误 ⇒ 就地结束）；聊天路径恒为空串 ⇒ 既有调用点一个字都不用改。
+    stop_reason: str = ""
 
     @property
     def streaming(self) -> bool:
@@ -534,15 +548,23 @@ def _order(
     pool: str,
     model: str = "",
     now: dt.datetime | None = None,
+    turns: dict[str, int] | None = None,
 ) -> list[int]:
     """候选行 → 送出顺序（下标）。`model` 只用于窗口维度的模型过滤（卡 A368）。
 
     不给 `model` ⇒ `_seat()` 不碰窗口，逐位等价于本卡之前（向后兼容既有调用点）。
+    ★ 卡 A372：`turns` 是 `rotate` 的轮转计数，**由调用方持有**（见下方注释）——
+      不传 ⇒ 退回原列顺序，与卡 A372 之前一个字节不差。
     """
     seats = [_seat(row, model, now=now) for row in cands]
     # apply_strategy 的末行就是 route.apply_order（route.py:580）—— 顺序护栏在那一份里，
     # 这里**不重写**：越界/重复/非整数一律退回原列顺序，永不抛（策略写坏也不许 500）。
-    return pool_route.apply_strategy(routing, seats, pool=pool)
+    # ★ 卡 A372（裁决 5）：rotate 的计数**由调用方持有**（route.rotate 的 turns 口子早就有，
+    #   只是没人传 ⇒ so_far 恒 0 ⇒ 恒等排列，缺口 1）。这里把调用方那份 dict 包成
+    #   apply_strategy 认的 state 形状（{"turns": …}），**不新建、不落盘** —— 换成一个新
+    #   空 dict 就等于每次从 0 开始，轮换会静默退回恒等（那正是本卡要修的）。
+    state = None if turns is None else {"turns": turns}
+    return pool_route.apply_strategy(routing, seats, pool=pool, state=state)
 
 
 def _error_body(protocol: str, kind: str, message: str) -> bytes:
@@ -607,7 +629,8 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
                reservations: Sequence[Mapping[str, Any]] = (),
                ledger: Mapping[str, Any] | None = None,
                scopes: Mapping[tuple[str, str], object] | None = None,
-               sink_on: bool = True) -> Outcome:
+               sink_on: bool = True,
+               turns: dict[str, int] | None = None) -> Outcome:
     """走完整一条：候选选择 → 沉底 / 每分钟闸 / 并发闸跳过 → 循环尝试 → 落账。
 
     forward 是**注入的**（签名 (model, account, url, payload) -> Reply）：干跑时给桩，
@@ -619,6 +642,12 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
       · 全被收窄挡 ⇒ 403 + 点名「收窄」，不叫「挂了」
       · 全 quota / rate 且知道何时回来 ⇒ 429 + Retry-After（最早回来的秒数）
       · 上游 4xx 非额度类 ⇒ 原样透传 status + body
+
+    ★ 卡 A372（F56）：`protocol=PROTOCOL_SEARCH` 时多一档 —— 只有**被拒**
+      （401/402/403/429/432/433）才换下一个 key；非拒绝类错误就地结束，原因写进
+      `Outcome.stop_reason`。聊天路径的换号语义**一个字节不动**（立卡人裁决 1）。
+    ★ `turns` 是 `rotate` 的轮转计数，**由调用方持有**（服务端就是 `_Server.turns`）；
+      不传 ⇒ 每次从头算 ⇒ rotate 恒等（这就是本卡要修的那个缺口，别把默认值当正常路径）。
     """
     base = _base_root(root)
     clock = now if isinstance(now, dt.datetime) else dt.datetime.now(dt.timezone.utc)
@@ -648,7 +677,7 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
     endpoint_missing: list[str] = []
     earliest: dt.datetime | None = None
 
-    for idx in _order(cands, routing, pool=pool, model=model, now=clock):
+    for idx in _order(cands, routing, pool=pool, model=model, now=clock, turns=turns):
         row = cands[idx]
         seat = str(row.get("id") or "")
         platform = str(row.get("platform") or "")
@@ -688,6 +717,14 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
         if kind is None:
             return _served(base, caller=caller, model=model, attempts=attempts,
                            reply=reply, started_at=started_at, seat=seat)
+        if (protocol == PROTOCOL_SEARCH
+                and int(reply.status) not in pool_quota.SEARCH_REFUSED_STATUS):
+            # 判据 4：搜索路径上非拒绝类错误（500 / 超时 / other / 413 / 400…）⇒ **就地结束**。
+            # 换下一个 key 只会再多打一次人家，而且把「同一把 key 的错」伪装成「换个人就好了」。
+            return _stopped(base, caller=caller, model=model, attempts=attempts, reply=reply,
+                            started_at=started_at,
+                            reason=(f"上游 {reply.status} 不是拒绝类（{kind}）"
+                                    "⇒ 搜索路径就地结束，不换下一个 key"))
         if kind == KIND_RATE:
             if pool_sink.should_sink(pool_sink.KIND_RATE, routing, on=sink_on):
                 pool_sink.sink(key, root=base)
@@ -705,6 +742,11 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
             # 换号，**不写沉底**（auth 不是限流），也不去写账本的 health —— 写账本是别的模块的事。
             continue
         if kind in (KIND_OVERFLOW, KIND_BAD_REQUEST):
+            if (protocol == PROTOCOL_SEARCH
+                    and int(reply.status) in pool_quota.SEARCH_REFUSED_STATUS):
+                # 卡 A372：432/433 在七值里落 bad_request，但搜索路径上它是「这家没钱了」
+                # ⇒ 换下一个 key（magpie search_keys.go:62-76 把 tavily 432/433 算余额耗尽）。
+                continue
             break  # 不换号：换号也装不下 / 是请求本身不对，原样透传
         continue  # server / other ⇒ 换下一个号，不降权
 
@@ -729,6 +771,23 @@ def _header(headers: Mapping[str, str] | None, name: str) -> str | None:
         if str(key).lower() == name:
             return str(value)
     return None
+
+
+def _stopped(base: Path, *, caller: str, model: str, attempts: list[Attempt], reply: Reply,
+             started_at: float, reason: str) -> Outcome:
+    """搜索路径的「非拒绝类错误 ⇒ 就地结束」：上游原样透传 + `stop_reason` + 落账 stopped。
+
+    ★ 为什么要一个专门的出口：判据 4 要的不是「悄悄不换号」，而是**读得出来的那一档**。
+      `Outcome.stop_reason` 是本卡新加的唯一可读位（默认空串 ⇒ 聊天路径看不出差别）。
+    """
+    headers = {k: v for k, v in (reply.headers or {}).items() if k.lower() not in HOP_HEADERS}
+    headers["X-Pool-Tried"] = "; ".join(a.label for a in attempts)
+    headers.setdefault("Content-Type", "application/json; charset=utf-8")
+    logged = _log(base, caller=caller, model=model, attempts=attempts, served="",
+                  status=pool_route_log.STATUS_STOPPED, started_at=started_at)
+    return Outcome(status=int(reply.status), headers=headers, body=reply.body,
+                   chunks=reply.chunks, attempts=tuple(attempts), logged=logged,
+                   stop_reason=reason)
 
 
 def _served(base: Path, *, caller: str, model: str, attempts: list[Attempt], reply: Reply,
@@ -1135,7 +1194,8 @@ class _Handler(BaseHTTPRequestHandler):
                              model=model.strip(), caller=caller,
                              forward=self.server.forward, protocol=protocol,
                              routing=str(getattr(self.server, "routing", "order") or "order"),
-                             body=payload, root=getattr(self.server, "root", None))
+                             body=payload, root=getattr(self.server, "root", None),
+                             turns=getattr(self.server, "turns", None))
         self._emit(outcome, want_stream=want_stream, protocol=protocol)
 
     def _get(self, path: str) -> None:
@@ -1210,6 +1270,10 @@ class _Server(ThreadingHTTPServer):
         self.routing = routing
         self.root = root
         self.request_log = log
+        # ★ 卡 A372（立卡人裁决 5）：rotate 的轮转计数**由服务端持有**，route_once 从这里取。
+        #   不改 route_once 的调用面（既有两个调用点一个字不用动）；进程活着就一直在转，
+        #   重启归零 —— 搜索 key 的轮转没有跨进程语义要求（原件也是内存计数）。
+        self.turns: dict[str, int] = {}
         port = int(self.server_address[1])
         loops = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
         extra = {str(o).strip() for o in origins if str(o).strip()}

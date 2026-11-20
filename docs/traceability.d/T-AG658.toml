@@ -1,0 +1,19 @@
+[entries."T-AG658"]
+id = "T-AG658"
+title = "F56搜索API多key轮换：被拒才换下一个、各自有rest"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tools/pool/route.py",
+  "file:tools/pool_quota.py",
+  "file:tools/pool/search.py",
+  "file:tools/pool/search-vendors.toml",
+  "file:tools/pool_accounts.py",
+  "text:tools/pool_quota.py::def search_key_id(vendor: str, key: str) -> str:",
+  "test:test_pool_search_keys.py::test_search_path_switches_key_on_a_refusal",
+  "test:test_pool_search_keys.py::test_order_rotates_and_keeps_resting_keys_last",
+  "test:test_pool_gateway.py::test_search_protocol_stops_at_the_first_non_refusal",
+]
+gaps = "1. 搜索腿今天没有 HTTP 入口：只做出 route_once(protocol=PROTOCOL_SEARCH) 的注入形态，gateway 的四个 PATHS 一个都没加 ⇒ 现在从网络面还调不到搜索 key 轮换。指针 tools/pool/gateway.py2. key 身份只有 8 字节 hex（sha256[:16]）⇒ 碰撞面比全长摘要大；只用于识别同一个 key，不当凭据也不写进日志。指针 tools/pool_quota.py3. tavily 的 429 带 Retry-After: 3600 会被 SEARCH_RATE_MAX_S=600 夹到 600 —— 厂商说的停放时长与本仓上界不一致，取本仓上界。指针 tools/pool_quota.py"
+
