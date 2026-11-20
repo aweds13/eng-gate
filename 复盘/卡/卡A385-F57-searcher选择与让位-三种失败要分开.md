@@ -4,17 +4,17 @@
 > depends 说明：草稿列了 A372、A363、A345、E94 四张。2026-11-20 实读 `docs/workbacklog.toml` 的 status：**A372（`docs/workbacklog.toml:6624`）仍 pending**，留在 depends；**A363（`:4977`）、A345（`:4743`）、E94（`:5564`）三张已 done**，一律降级成读法参照（见末节「与已完成卡的关系」）。★ 按今天实况核过：留 done 卡**不会**报冲突 —— `tools/pool/plan.py:267-272` 的 T-G119 更正写明 done / failed **不参与冲突判定**（`:268` 逐字「**`done` / `failed` 不参与冲突判定** —— 它们占过的文件与树**已经释放**」）。不留在 depends 的理由是：depends 只该列还欠着的依赖，队列读者不必再回 backlog 查一遍状态。**A372（F56 搜索 API 多 key 轮换）今天还没落地**：tools/pool/search.py、tools/pool/search-vendors.toml、tests/test_pool_search_keys.py 三件实测都不存在（`os.path.exists` 三条全是 False，2026-11-20 实读）。本卡要回答的「谁是可被问的 searcher、它有没有 key」只能来自 A372 的 vendor 表；**A372 不落，本卡不许开工**（否则本卡会长出第二份 vendor 名单）。A363 是 `tools/pool/route_log.py` 的卡 —— 本卡**不碰**那个文件（理由见「不许做」第 1 条）。A345 是 `tools/pool/sticky.py` 的卡 —— 「卡粘性」与「searcher 的选择」是同一形状（两层选择 + 理由），本卡只借读法不借字段。E94 是 `tools/pool/gateway.py` 的卡，它立的四条硬边界（不翻译协议 / 不做凭据发现 / 不做定时器 / 不复制判据）本卡全部继承。
 > 域相交（**未拍板**，登记进队列前必须处理）：本卡 files 含 `docs/subsystems/pool/modules.toml`；2026-11-20 实读，pending 且 files 也含它的还有 A372、A374、A375、A380 四张。`tools/pool/plan.py:170-180` 的 `files_intersect()` 是**精确字符串**集合相交（不认通配）、`:233-240` 的 `dependency_path()` 认传递、`:257-340` 的 `validate()` 冲突类 ①（判定在 `:320-327`）要求「同域两卡之间必须有依赖路径」才允许共存，且只判 pending / running。两条出路：(a) depends 再加 **A380** —— 它的 depends 已含 A374、A375、A372，传递即可覆盖四张，代价是本卡排到它们之后；(b) files 去掉 modules.toml —— 代价是 `scripts/gen_pool_readme.py --check` 退 1 并点名缺 searcher.py。**倾向 (a)，未拍板**（决定权在立卡人）。
 > 基准说明：立卡时主树 HEAD = `f7d4d305`（`git rev-parse --short HEAD` 实读，2026-11-20 05:35；该提交 2026-11-20 05:25:00 +0800，提交语「feat(pool): F26整窗用量估算接进派活面：没料就说得出为什么，不许估0（T-AG654）」）。草稿起草时的基准是 `08364825`，起草期间到过 `466a2578`；本文全部本仓「文件:行号」已按 `f7d4d305` 逐条重核，与草稿的差异逐处写在正文里（`tools/pool/gateway.py` 的 `classify` 180→**181**、换号循环 544→**651**、`continue  # server / other` 602→**709**、`route_once` 的 `forward` docstring 501-503→**613-614**、`_order` 431-435→**530**；`tools/pool/model_registry.py` 的 `class ModelEntry` 135→**136**；`tools/pool/outcomes.py` 的 `is_outcome` 124→**123**；`tests/test_pool_rest.py` 现共 **328** 行，草稿的 304-333 越界）。落地前按当时 HEAD 再核一次。
-> 依据：`gates/diag/_magpie_scope.md:65` 逐字 `| F57 | searcher 的选择与「让位」 | PORT | no | 同上，无 searcher 选择逻辑 |` + `../_ext/_magpie_features.md:488-494`（原件在本仓**上一级**目录 `D:/repo/program/_ext/`，故写作 `../_ext/...`）+ magpie 原件 `../_ext/magpie-main/internal/gateway/search.go`（1287 行，逐行读过）、`../_ext/magpie-main/internal/netguard/netguard.go`（97 行，F57 的「让位到哪」与 F58 共用一份地址判据）。
+> 依据：`gates/diag/_magpie_scope.md:65` 逐字 `| F57 | searcher 的选择与「让位」 | PORT | no | 同上，无 searcher 选择逻辑 |` + ../_ext/_magpie_features.md:488-494（原件在本仓**上一级**目录 `D:/repo/program/_ext/`，故写作 ../_ext/...）+ magpie 原件 ../_ext/magpie-main/internal/gateway/search.go（1287 行，逐行读过）、../_ext/magpie-main/internal/netguard/netguard.go（97 行，F57 的「让位到哪」与 F58 共用一份地址判据）。
 
 ## 前情
 
-magpie 解决的是一个**静默失效**问题：把「搜了但没找到」「压根没搜」「报错」三件事混成一团，搜索就会在没人发现的情况下退化成「模型凭记忆回答」。`../_ext/_magpie_features.md:490` 逐字：
+magpie 解决的是一个**静默失效**问题：把「搜了但没找到」「压根没搜」「报错」三件事混成一团，搜索就会在没人发现的情况下退化成「模型凭记忆回答」。../_ext/_magpie_features.md:490 逐字：
 
 > 解决："搜了没找到"和"压根没搜"和"报错"混为一谈会让搜索静默失效。
 
 它的实现由三段组成，本卡只移植其中**判据层**（纯函数），不接线：
 
-1. **选谁**：`settings.Searcher`（空 = 自动；`"off"` = 关掉 provider 搜索）→ `chosenSearcher()` 给出 `(provider, model, why)`，`why` 是四值闭集（`../_ext/magpie-main/internal/gateway/search.go:379-385`）：
+1. **选谁**：`settings.Searcher`（空 = 自动；`"off"` = 关掉 provider 搜索）→ `chosenSearcher()` 给出 `(provider, model, why)`，`why` 是四值闭集（../_ext/magpie-main/internal/gateway/search.go:379-385）：
 
 ```go
 SearcherGone = "gone"   // no such provider any more
@@ -227,7 +227,7 @@ python -X utf8 -m ruff check tools/pool/searcher.py tests/test_pool_searcher.py
 
 ## 未坐实项（草稿如实标注，别当成结论）
 
-1. **未取证**：`../_ext/magpie-main/internal/gateway/search_kimi.go`（169 行）与 `../_ext/magpie-main/internal/gateway/search_workbuddy.go`（133 行）只核了**文件存在与行数**（`wc -l`），没读 `canSearchFor` / `wbSearch` 的实现。本卡把「Kimi Code 的搜索服务 / WorkBuddy 的搜索服务」归到「provider 自带能力，不在本卡移植范围」—— 这条归类**没有证据**，落地前要补读。
+1. **未取证**：../_ext/magpie-main/internal/gateway/search_kimi.go（169 行）与 ../_ext/magpie-main/internal/gateway/search_workbuddy.go（133 行）只核了**文件存在与行数**（`wc -l`），没读 `canSearchFor` / `wbSearch` 的实现。本卡把「Kimi Code 的搜索服务 / WorkBuddy 的搜索服务」归到「provider 自带能力，不在本卡移植范围」—— 这条归类**没有证据**，落地前要补读。
 2. **本卡不接线**（纯函数先落，照 `tools/pool/holds.py` 的先例）。理由：接进生产会碰 `gateway.py` / 搜索编排，那两处分别属于 A368（已 done）/ E143（已 done）/ A372（pending）。**若立卡人要求本卡就接线**，files 域必须加 `tools/pool/gateway.py`；届时 A368、E143 已是 done，**别把 done 卡写进 depends**，需要另开一张接线卡，且判据 4 要扩一条端到端。**未拍板。**
 3. **`searcherSpent`（额度耗尽不试，#1801）没有移植**：它依赖 magpie 自己的额度读数（`search.go:769`、`:786`）；pool 侧对应物是 `pool_quota.status` 的四态（`tools/pool_quota.py`）与 `tools/pool/limits.py:109` 的 `assert_serving`。两者能不能一一对上**未坐实**。本卡只移植 `autoSearcher` 的「有额度的排在全耗尽的之前」（`search.go:364-374` 的 `bestReady` 规则），**不移植**那句额度文案。
 4. **模型注册表要不要加「会不会搜网页」这一列**（`tools/pool/model_registry.py:136-149` 五字段、`:197` 只认三个必填键）：加了要动解析器与 `tests/test_model_registry.py`。草稿倾向**不加** —— searcher 能力由 provider 名 + 协议决定（`searchRank` 就是静态表，不看模型）。**未拍板。**
