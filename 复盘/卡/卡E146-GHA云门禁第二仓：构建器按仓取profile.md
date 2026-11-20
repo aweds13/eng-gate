@@ -7,7 +7,7 @@
 
 ### 问题 1 · 骨架里写死着 engineering 的形状
 
-`scripts/cloud/gha/build_snapshot.py`（E145 后 470 行）里：`DEFAULT_TASK = "T-AG526"`、`RUFF_PATHS` 六目录、`SMOKE_TARGETS` 18 条 engineering 定向 pytest、`SMOKE4_TARGETS` 两条、`POOL_NEED` 四件号池桩、适配器落地文件名 `tests/test_windows_autostart_e2e.py`、提交标题 `gate: engineering 23 gates on windows-latest (adapter v18)`。⇒ 换一个仓只能复制一份脚本改改，两份必然各自漂移 —— 这正是任务书（m00001）明令不许的形态。
+`scripts/cloud/gha/build_snapshot.py`（E145 后 470 行）里：`DEFAULT_TASK = "T-AG526"`、`RUFF_PATHS` 六目录、`SMOKE_TARGETS` 18 条 engineering 定向 pytest、`SMOKE4_TARGETS` 两条、`POOL_NEED` 四件号池桩、适配器落地文件名 tests/test_windows_autostart_e2e.py（计划建，落地前本体由卡 E146 的卡树提供）、提交标题 `gate: engineering 23 gates on windows-latest (adapter v18)`。⇒ 换一个仓只能复制一份脚本改改，两份必然各自漂移 —— 这正是任务书（m00001）明令不许的形态。
 
 ### 问题 2 · 第二仓（OpenMAIC）在 GHA 这条腿上没有入口
 
@@ -25,7 +25,7 @@
 
 ### 判据 2 · 仓与仓的差别全在 `scripts/cloud/gha/profiles/<仓>.toml`，且每份都读得动
 
-新增 `scripts/cloud/gha/gate_profile.py`（子命令式加载器：`SCHEMA` 十段 + `_cross_check` 十一条交叉约束 + `load()` / `list_repos()` / `shell_split()`）与两份 profile：engineering 一份（逐字复刻既有行为）、openmaic 一份（node 腿）。未知段 / 未知键一律 `ProfileError`（拼错的键静默生效 = 配置没人读）。由 `test_every_profile_in_the_directory_loads` 钉住。
+新增 scripts/cloud/gha/gate_profile.py（计划建，落地前本体由卡 E146 的卡树提供）（子命令式加载器：`SCHEMA` 十段 + `_cross_check` 十一条交叉约束 + `load()` / `list_repos()` / `shell_split()`）与两份 profile：engineering 一份（逐字复刻既有行为）、openmaic 一份（node 腿）。未知段 / 未知键一律 `ProfileError`（拼错的键静默生效 = 配置没人读）。由 `test_every_profile_in_the_directory_loads` 钉住。
 
 ### 判据 3 · 第二仓那份 profile 里 engineering 专属键一个都不许出现
 
@@ -45,8 +45,8 @@
 
 ## 交付
 
-1. `scripts/cloud/gha/gate_profile.py`（新文件）：profile 加载器 + 交叉约束。
-2. `scripts/cloud/gha/profiles/engineering.toml` / `openmaic.toml`（新文件）。
+1. scripts/cloud/gha/gate_profile.py（计划建，落地前本体由卡 E146 的卡树提供）（新文件）：profile 加载器 + 交叉约束。
+2. scripts/cloud/gha/profiles/engineering.toml（计划建，落地前本体由卡 E146 的卡树提供） / `openmaic.toml`（新文件）。
 3. `scripts/cloud/gha/build_snapshot.py`：改成 profile 驱动 —— `--repo` 选 profile；build 段按 `snapshot.*` 装 workflow / 查 require_files / require_text / 装适配器 / 写豁免块 / 保证据文件 / 跑生成器；smoke 段按 `smoke.*` 跑；push 段按 `sync.mode` 决定「没有第二笔可提交」是不是失败。新增 `_resolve_argv0()`（PATHEXT 解析）、`_exec_bits()` / `_restore_exec_bits()`（Windows 造 Linux 快照保住 100755）。
 4. `tests/test_gha_cloud_gate.py`：加判据 1/2/3/4 的六条用例。
 5. `docs/subsystems/ci/GitHub-Actions-云门禁.md`：§3 改成 profile 驱动的三段；§8 从「第二仓那条腿不是这份脚本造的」改成「已经由这份脚本造出来，读数如下」，并把判据 5 的逐行对比写成真读数。

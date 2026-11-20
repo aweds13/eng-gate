@@ -569,7 +569,7 @@
 ## 统计
 
 - **总篇数**：465
-- **总字数**：1441207 字（约 144.1 万字），中位 711 字，最长 539679 字，最短 133 字
+- **总字数**：1441226 字（约 144.1 万字），中位 711 字，最长 539679 字，最短 133 字
 - **按段**：`docs/` 15、`docs/changelog.d/` 377、`docs/contracts/` 2、`docs/decisions/` 11、`docs/implementation/` 6、`docs/intention/` 2、`docs/reference/` 1、`docs/research/` 6、`docs/runbooks/` 1、`docs/specification/` 6、`docs/taste/` 1、`docs/contracts/domains/` 12、`docs/specification/domains/` 13、`docs/subsystems/ci/` 7、`docs/subsystems/pool/` 5
 - **按 mode**：tutorial 0 / howto 0 / reference 0 / explanation 0 / 未标注 465
 - **按 status**：active 0 / superseded 0 / draft 0 / 未标注 465
