@@ -1,3 +1,8 @@
+## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
+- 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
+- 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。
+- tests/test_gha_cloud_gate.py 14 → 26 条（片区全是新判据：骨架禁 engineering 四字面、第二仓禁三键、未知仓退 2、require_text/workflow.install 正反面、all 在新 dest 上不被挡）。
+- 文书 docs/subsystems/ci/GitHub-Actions-云门禁.md 的 §3/§5/§8 重写：§8 从「真读数在但不是这份脚本造的」改成「每仓一份 profile」。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

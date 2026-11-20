@@ -1,0 +1,89 @@
+# GHA 云门禁 profile —— engineering 仓（pipe 框架本仓）
+#
+# ★ 这一份**必须**与「profile 化之前 build_snapshot.py 里写死的值」逐字一致：
+#   验收判据是「engineering 用新骨架跑一趟，23 门读数与现在一致」。改它 = 改判据的输入。
+#   键的语义见 ../gate_profile.py 的 SCHEMA；这套键与 ECS 那条路的
+#   scripts/cloud/profiles/engineering.toml **不是一套**（两套骨架各认各的）。
+
+name = "engineering"
+# 快照提交的标题行与台账编号：audit 门的 trailer 判据与 tools/pytest_select.py 的
+# log_batch() 都读 Task:，没有它 audit 报「没有 Task: trailer」。
+message = "gate: engineering 23 gates on windows-latest (adapter v18)"
+task = "T-AG526"
+
+[remote]
+env = "GHA_REMOTE"
+# 这台机器 HTTPS:443 到 github.com 不可达（见 docs/subsystems/ci/GitHub-Actions-云门禁.md），
+# 所以推仓走 SSH；私钥由 GIT_SSH_COMMAND 从外面给，缺了退 2。
+transport = "ssh"
+
+[sync]
+# 远端仓的历史与本地树不同源（它是被 generate 出来的镜像），所以整段历史用 bundle 推。
+mode = "bundle"
+bundle_name = "eng-history.bundle"
+
+[snapshot]
+dir_name = "enggate"
+# workflow 在远端是冻结的（本 token 没有 workflow scope，改不了它）⇒ 只能从远端取 .github，
+# 那是快照里唯一需要远端历史的东西。
+from_remote_workflows = true
+# 这两件是**审计证据**（docs/traceability.toml 的 T-00 / T-G47 引用它们），不是生成物：
+# 删掉会让 docs 门报死指针、audit 门两项红。
+evidence_files = ["gates/last.json", "gates/reuse.json"]
+# 这次构建提交会碰到的文件：写进台账豁免块，否则 test_real_repo_history_files_are_all_claimed
+# 会把它们判成「台账没声称过」。
+ledger_exempt = ["tests/test_windows_autostart_e2e.py", "tests/conftest.py", ".github/**"]
+# 派生文档要在**产物树里**现算，不能把开发机的数字搬过去（README 的派活日志行、docs/INDEX.md）。
+generators = [
+  { tag = "GEN_README", cmd = "scripts/gen_pool_readme.py" },
+  { tag = "GEN_INDEX", cmd = "scripts/gen_doc_index.py --target docs" },
+]
+
+[adapter]
+# 冻结的 workflow 最后一步写死 python -m pytest -q tests/test_windows_autostart_e2e.py
+# ⇒ 适配器必须叫这个名字，换了就一条用例都收集不到。
+enabled = true
+src = "adapter.py"
+snapshot_name = "tests/test_windows_autostart_e2e.py"
+conftest_shim = "conftest_shim.txt"
+diag_fixtures = true
+
+[pool]
+# 仓外的 infra/pool 在本仓是「向上找」的（tools/pool/models.py 的 find_pool_dir），
+# runner 上没有 ⇒ 快照旁边现造一份桩；projects.toml 的 root 要改写成快照路径。
+stub = true
+need = ["pool_models.py", "models.whitelist.toml", "models.live.json", "accounts.toml"]
+rewrite_root = true
+
+[smoke]
+# 推送前必须绿的定向 pytest（每一条都是历史上真红过的那一种）。
+python_targets = [
+  "tests/test_audit_tightening.py::test_real_repo_history_files_are_all_claimed",
+  "tests/test_pool_sink_wiring.py::test_sink_module_eight_functions_untouched",
+  "tests/test_two_rulers.py::test_old_rev_still_has_gates_stripped",
+  "tests/test_card_doc_budget.py::test_numeric_short_sha_is_still_a_pointer",
+  "tests/test_doc_debt_ratchet.py::test_real_repo_debt_does_not_exceed_baseline",
+  "tests/test_gate_selfproof.py::test_real_ledger_passes_all_criteria",
+  "tests/test_pool_jobs.py::test_real_diag_census_buckets",
+  "tests/test_pool_accounts.py::test_ledger_lives_outside_tool_root",
+  "tests/test_pool_projects.py",
+  "tests/test_check_docs.py::test_every_own_ext_is_justified",
+  "tests/test_gate_env_parity.py::test_workspace_crlf_vs_head_blob_lf_is_not_a_defect",
+  "tests/test_web_live_json_retry.py",
+  "tests/test_pool_readme_counts.py::test_real_readme_matches_recount",
+  "tests/test_pool_landing.py::test_real_tree_derived_docs_are_consistent",
+  "tests/test_pool_landing.py::test_every_leg_checks_the_index",
+  "tests/test_pool_jobs.py::test_gen_pool_readme_check_is_green",
+  "tests/test_wb_land.py::test_card_and_batch_is_exactly_one",
+  "tests/test_gate_selfproof_product.py::test_web_live_bites_when_the_event_delegation_is_gone",
+]
+# 只在这一组目录里跑 ruff（与 scripts/run_gates.py 的 ruff 门同口径）。
+ruff_paths = ["src", "tests", "scripts", "tools", "examples", "harness"]
+docs_check = "scripts/check_docs.py --mode report"
+# 提交之后才能判的两条（都读「最近一笔提交」）。
+post_commit_targets = [
+  "tests/test_pytest_select.py::test_log_batch_agrees_with_the_per_commit_reads",
+  "tests/test_docs_fragments.py::test_audit_verdict_unchanged_by_sync",
+]
+# 与适配器的 setdefault 同值：冒烟这里若比 runner 宽或严，冒烟绿了真跑还会红。
+env = ["TF_WEB_LIVE_TIMEOUT=60"]

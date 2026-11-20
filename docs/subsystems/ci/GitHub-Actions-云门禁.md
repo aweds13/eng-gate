@@ -62,8 +62,10 @@ ECS 那条路没被删：`scripts/cloud/run_gate.sh` 与两份 profile 原地不
 ```powershell
 $env:GHA_REMOTE = "git@github.com:<owner>/<repo>.git"
 $env:GIT_SSH_COMMAND = "ssh -i <deploy key> -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
-python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
+python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage all
 ```
+
+`--repo` 选哪一份 profile（默认 `engineering`，`GHA_REPO` 同效）；仓与仓的差别全在那份 profile 里，见 §8。
 
 `--stage` 四选：`build` / `smoke` / `push` / `all`。三段各自能单跑，`all` 是串起来。
 除 `build` 之外的每一段都**在已有的快照目录上干活**（`smoke` 还会往 `<快照的父目录>/infra/pool` 造桩、
@@ -71,7 +73,8 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
 以前这里不判，`push` 会甩一个 `NotADirectoryError: [WinError 267]` 的栈、`smoke` 更糟 ——
 三段全红却退 0（卡 E145 实测）。
 
-**build —— 造一棵能推的快照树**（默认落在 `gates/diag/_tmp/enggate`，被 `.gitignore` 挡住）：
+**build —— 造一棵能推的快照树**（默认落在 `<tmp>/<profile 的 snapshot.dir_name>`，被 `.gitignore` 挡住）。
+下面以 engineering 那份 profile 为例；哪几步做、做多少，全由 profile 的键决定（§8.1）：
 
 1. `git bundle create` 把**当前 HEAD 的完整历史**打成一个包（只要 HEAD 那一层也行，但 11 条历史判据要 `git log`，
    所以走 bundle + 后续 `fetch --unshallow`，见适配器的 `_ensure_history()`）。
@@ -88,6 +91,10 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
    删了 docs 门会报死指针暴涨）。
 8. 现造三份 diag fixture（`wb-E14.trae.jsonl` 等），再重算 `docs/subsystems/pool/README.md` 与 `docs/INDEX.md`。
    ★ 顺序不能反：生成器读的是**盘上真实有几份**派活日志，fixture 不先落盘，README 里的计数就差 239。
+
+第 2 步之后还有一道**静态体检**（`[snapshot].require_files` 与 `require_text`）：profile 说「快照里必须真有这几件 / 必须含这几行字样」，
+缺一件就退 5。它挡的是「装错树」—— 装依赖要十几分钟，装完才发现跑的不是那个仓，是最贵的失败方式。
+这一步不联网、不装依赖，几秒钟。
 
 **smoke —— 推之前先在本机把最容易被快照形状弄红的那批判据跑一遍**：18 条定向 pytest + `ruff check` 六目录 +
 `scripts/check_docs.py --mode report`。冒烟必须**复刻适配器在 runner 上做的事**（同一个 `_ensure_pool_stub()` /
@@ -125,10 +132,10 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --stage all
 | 码 | 常量 | 含义 | 典型日志记号 |
 |---|---|---|---|
 | 0 | `EXIT_OK` | 跑完了 | `BUILD_DONE` |
-| 2 | `EXIT_CONFIG` | 缺配置：没给远端 / 没给 `GIT_SSH_COMMAND` / 适配器或垫片文件不在 / 快照目录不在 | `MISSING_REMOTE` / `MISSING_GIT_SSH_COMMAND` / `MISSING_ADAPTER` / `MISSING_DEST` |
+| 2 | `EXIT_CONFIG` | 缺配置：profile 不成立 / 没给远端 / 没给 `GIT_SSH_COMMAND` / 适配器、垫片或要装的 workflow 文件不在 / 快照目录不在 | `PROFILE_INVALID` / `MISSING_REMOTE` / `MISSING_GIT_SSH_COMMAND` / `MISSING_ADAPTER` / `MISSING_WORKFLOW_SRC` / `MISSING_DEST` |
 | 3 | `EXIT_HISTORY` | 历史或 workflow 拿不到（bundle / fetch / `.github` checkout） | `BUNDLE_FAILED` / `FETCH_FAILED` / `WORKFLOW_CHECKOUT_FAILED` |
 | 4 | `EXIT_COMMIT` | 本地提交失败 | `COMMIT_FAILED` |
-| 5 | `EXIT_SNAPSHOT` | 快照形状不对（垫片撞车 / 豁免块已在 / 证据文件不在），或冒烟有红色 | `CONFTEST_ALREADY_HAS_ADDOPTION` / `LEDGER_ALREADY_EXEMPT` / `MISSING_EVIDENCE_FILE` / `SMOKE_FAILED` |
+| 5 | `EXIT_SNAPSHOT` | 快照形状不对（垫片撞车 / 豁免块已在 / 证据文件不在 / profile 点的必存文件或必含字样缺了），或冒烟有红色 | `CONFTEST_ALREADY_HAS_ADDOPTION` / `LEDGER_ALREADY_EXEMPT` / `MISSING_EVIDENCE_FILE` / `MISSING_REQUIRED_FILE` / `MISSING_REQUIRED_TEXT` / `SMOKE_FAILED` |
 | 6 | `EXIT_POOL` | 号池桩不对，或仓内混进了 `infra/`，或推前判据红 / 推失败 | `MISSING_POOL_STUB` / `POOL_STUB_INCOMPLETE` / `INFRA_INSIDE_SNAPSHOT` / `SMOKE4_FAILED` / `PUSH_FAILED` |
 
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
@@ -184,38 +191,81 @@ py=3.12.10  workers=4  bad=[]
 5. **仓外号池桩每次现造**：它是零凭据的合成件，只为了让「号池目录在哪」这类判据有东西可读；
    它证明不了真号池能派活。
 
-## 8. 第二仓（OpenMAIC）那条腿：真读数在，但**不是**这份脚本造的
+## 8. 每仓一份 profile：同一份骨架服务第二个仓
 
-任务书的验收里有一条是「OpenMAIC 仓能在云上跑出真的 vitest 读数」。这条腿今天的实际情况：
+§2 那种「形状被冻结的 workflow 倒推出来」的做法是 **engineering 专有的**。第二仓不该复制一遍它 ——
+复制两份脚本就会各自漂，这正是 ECS 那条路当初抽出 `profiles/<仓>.toml` 的理由。所以这里也一样：
+骨架只认键，仓与仓的差别全在 `scripts/cloud/gha/profiles/<仓>.toml`，由 `--repo` 选。
 
-**有真读数**（源：镜像仓 `aweds13/om-gate` 的 run `43902435671`，head `19b46314`，
-2026-11-16 四个 `Unit Tests (N/4)` 作业的日志汇总）：
+```powershell
+$env:GHA_REMOTE = "<远端仓 URL>"
+python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage all
+python -X utf8 scripts/cloud/gha/build_snapshot.py --repo openmaic    --stage all
+```
+
+`--repo` 收仓名（`profiles/<仓>.toml`）或一份 `.toml` 的路径；名字与文件名对不上、出现未知的段 / 未知的键、
+跨键自相矛盾（例如 `from_remote_workflows = true` 同时又要装自己的 workflow）一律退 2 + `PROFILE_INVALID` ——
+拼错的键静默生效就等于「profile 写了但没人读」。
+
+### 8.1 两份 profile 的差别（就是「仓无关」的全部内容）
+
+| 键 | `profiles/engineering.toml` | `profiles/openmaic.toml` | 为什么不同 |
+|---|---|---|---|
+| `sync.mode` | `bundle`（整段历史） | `tree`（只要当前树内容） | OpenMAIC 的源树是**浅克隆**，`git bundle create` 打出来是断链，fetch 报 `did not send all necessary objects` —— 那不是网络坏，是历史不完整；这条路本来也不要它的历史 |
+| `snapshot.from_remote_workflows` | `true` | `false` | engineering 的 workflow 在镜像仓冻结（§2）；OpenMAIC 的 workflow 归它自己，树里带过来的就是对的 |
+| `adapter.enabled` | `true`（快照里装成 `test_windows_autostart_e2e.py`，路径见 `adapter.snapshot_name`） | `false` | 只有冻结作业那一步写死了文件名才需要适配器；OpenMAIC 由它自己 `ci.yml` 的 `unit` 作业跑 |
+| `pool.stub` | `true`（五件号池桩 + 改写 root） | `false` | 号池是 engineering 的仓外依赖 |
+| `snapshot.ledger_exempt` / `task` | 三条 + `T-AG526` | 空 | 审计门的 trailer 判据只在有台账的仓成立；没台账还写 `Task:` 就是伪造出处 |
+| `snapshot.require_text` | 空 | 三条（`engines.node` / vitest include / ci.yml 的 `--shard=`） | 「这棵树是不是我以为的那棵」按仓各自的锚点判，几秒钟、不装依赖 |
+| `smoke` | 18 条定向 pytest + ruff 六目录 + `check_docs` | 两条不装依赖的命令（node 版本契约、`pnpm --lockfile-only`） | 冒烟要「几秒、但真的会红」，不能付十几分钟的安装费 |
+
+两套 profile 目录**刻意分开**（`scripts/cloud/profiles/` 是 ECS 那条路的，`scripts/cloud/gha/profiles/` 是本页的）：
+它们认的键不是一套，混在一起会让「这份 profile 喂给哪个骨架」只能靠猜。
+
+### 8.2 判据：engineering 逐字不变
+
+「不复制脚本」的代价是「抽骨架时会不会顺手改了 engineering 的行为」。这条不靠眼力，靠两趟对比：
+同一 HEAD 上分别用**改动前**的构建器与**改动后**的骨架各造一棵快照，再逐行比：
+
+```
+git ls-tree -r HEAD  # 两边各 2786 条
+only old 0 / only new 0
+```
+
+另外 `tests/test_gha_cloud_gate.py` 里三条钉子盯着这一层：`test_skeleton_has_no_repo_specific_literals`
+（骨架源码里不许出现 `test_windows_autostart_e2e.py` / `T-AG526` / `gate: engineering` / `models.whitelist.toml`）、
+`test_every_profile_in_the_directory_loads`（每份都得读得动）、
+`test_second_repo_profile_has_no_engineering_keys`（第二仓禁 `TF_PROJECTS_TOML` / `models.whitelist.toml` / `line/impl-v1`）。
+
+### 8.3 真读数：OpenMAIC 的 vitest 是它自己 `ci.yml` 跑的（这一节要说清楚边界）
+
+源：镜像仓 `aweds13/om-gate` 的 run `44753382083`，head `92f3c6fe`（2026-11-20），
+四个 `Unit Tests (N/4)` 作业的日志汇总（runner 上 `node v22.23.4`）：
 
 | 分片 | Test Files | Tests | Duration |
 |---|---|---|---|
-| 1/4 | 4 failed / 277 passed / 17 skipped (298) | 14 failed / 3535 passed / 195 skipped (3744) | 144.13 s |
-| 2/4 | 285 passed / 12 skipped (297) | 3483 passed / 80 skipped (3563) | 189.25 s |
-| 3/4 | 5 failed / 284 passed / 8 skipped (297) | 8 failed / 3586 passed / 87 skipped (3681) | 224.03 s |
-| 4/4 | 5 failed / 287 passed / 5 skipped (297) | 42 failed / 4123 passed / 86 skipped (4251) | 220.66 s |
-| 合计 | 14 failed / 1133 passed / 42 skipped | 64 failed / 14727 passed / 448 skipped | 四片相加 ≈ 778 s |
+| 1/4 | 4 failed / 277 passed / 17 skipped (298) | 14 failed / 3535 passed / 195 skipped (3744) | 184.06 s |
+| 2/4 | 285 passed / 12 skipped (297) | 3483 passed / 80 skipped (3563) | 133.54 s |
+| 3/4 | 5 failed / 284 passed / 8 skipped (297) | 8 failed / 3586 passed / 87 skipped (3681) | 184.63 s |
+| 4/4 | 5 failed / 287 passed / 5 skipped (297) | 42 failed / 4123 passed / 86 skipped (4251) | 215.49 s |
+| 合计 | 14 failed / 1133 passed / 42 skipped | 64 failed / 14727 passed / 448 skipped | 四片相加 ≈ 717.7 s |
 
-**但它是 OpenMAIC 自己的 `ci.yml` 跑的**，不是本仓这份构建器：那次是把 OpenMAIC 树原样推上 om-gate、
-由它仓里那份完整的 workflow（`--shard=N/4`、`setup-workspace` 复合 action、node 22）跑出来的。
-本仓 `scripts/cloud/gha/` 下**只有 engineering 的构建器**（快照形状、适配器文件名、号池桩、23 道门全是
-engineering 的），没有任何一行认识 vitest。
+★ **边界**：这一趟的树是本页这份构建器推上去的（`--repo openmaic --stage push`），但**读数不是它打的** ——
+是 OpenMAIC 自己那份 `ci.yml` 的 `unit` 作业打的。骨架在这条腿上的职责只是「把正确的树送上正确的仓」，
+「跑什么」由那个仓自己的 workflow 说了算。这不是妥协：判据仍在仓内（`vitest.config.ts` + `tests/**/*.test.ts`），
+runner 只在外面跑 —— 与 §0 那条原则一致。
 
-两条腿要分清：
+所以「构建器认不认 vitest」这件事，答案是**它不需要认**：骨架里没有一行 vitest，`--repo openmaic` 与
+`--repo engineering` 走的是同一段代码，差别全在上表那些键里。
 
-| | 租 ECS（`run_gate.sh`） | 租 runner（本页） |
-|---|---|---|
-| 是否已经两仓通用 | **是**：`scripts/cloud/profiles/engineering.toml` 与 `openmaic.toml` 两份，骨架同一份 | **否**：只有 engineering 的构建器 |
-| 证据 | `tests/test_cloud_profiles.py`（骨架里不许出现 engineering 字面、第二份 profile 禁 5 个专属键、渲染无缺键） | 本页 §6（engineering 两趟）+ 本节（OpenMAIC 是它自己的 CI 跑的） |
+### 8.4 这条腿今天的边界
 
-要把这条腿也做成通用，缺的是**一个 `--repo` 化的构建器**：快照从哪个仓取、适配器叫什么名字、
-开跑前装什么、跑什么命令、产物在哪 —— 这些在这条路上今天全是硬编码，等价于 ECS 那条路的
-`profiles/<仓>.toml`。另外 om-gate **没有** eng-gate 那种「workflow 被冻结、推不上去」的约束
-（它那份 `ci.yml` 是可以改的），所以第二仓的适配层不需要绕 workflow scope，形状可以不一样。
-
-**别把这一节读成「已经通用」**：工程上成立的只有「判据仍在仓内、runner 只在外面跑」这一条原则两仓共享；
-脚本层面，今天是一仓一份。
+1. **仍然改不了 workflow**：本机的 token 没有 workflow scope（§2、§7.1）。om-gate 的 `ci.yml` 不是我们改的，
+   它原本就在那棵树里、原本就按 `--shard=N/4` 跑。要换触发条件 / 换 `runs-on`，同样得有 workflow scope。
+2. **`[workflow].install` 这条键今天没有使用者**：它是给「仓自己的 workflow 不认我们这套 BEGIN/END 读数、
+   但仓又能自己写 workflow」的那种仓准备的。两个仓都不在这个交集里 —— engineering 改不了，OpenMAIC 不需要。
+   键留着，但没跑过就别说它行。
+3. **读数的形状不一样**：engineering 那边是适配器把 `gates/last.json` 包在 `=== GHA-GATE-READING-BEGIN/END ===`
+   里打出来（一个 JSON，23 道门）；OpenMAIC 那边是 vitest 自己的四段汇总行，没有统一的 JSON 外壳。
+   想要统一形状，得给第二仓写一个适配器 + 装一份自己的 workflow —— 那是另一张卡的活。
 

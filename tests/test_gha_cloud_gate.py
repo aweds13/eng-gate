@@ -25,6 +25,10 @@ SHIM = GHA / "conftest_shim.txt"
 #: 适配器在快照里必须叫这个名字 —— 冻结的 workflow 最后一步写死它。
 ADAPTER_SNAPSHOT_NAME = "test_windows_autostart_e2e.py"
 
+#: 每仓一份适配层（键的语义见 gate_profile.py 的 SCHEMA）。
+PROFILE_LOADER = GHA / "gate_profile.py"
+PROFILES = GHA / "profiles"
+
 
 def _load(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -42,7 +46,8 @@ def test_three_files_are_in_git():
     """判据 1：三件进库，且 `git ls-files` 认它们（不是只躺在盘上）。"""
     out = _run(["git", "ls-files", "--", "scripts/cloud/gha"]).stdout
     tracked = {ln.strip() for ln in out.splitlines() if ln.strip()}
-    for p in (BUILD, ADAPTER, SHIM):
+    for p in (BUILD, ADAPTER, SHIM, PROFILE_LOADER, PROFILES / "engineering.toml",
+              PROFILES / "openmaic.toml"):
         rel = p.relative_to(ROOT).as_posix()
         assert rel in tracked, f"{rel} 没进 git —— 只在盘上的脚本换个机器就没了"
 
@@ -56,12 +61,16 @@ def test_build_snapshot_help_has_the_three_switches():
 
 
 def test_adapter_snapshot_name_is_pinned():
-    """判据 1：适配器装成哪个名字是**判据**，不是实现细节。"""
-    src = BUILD.read_text(encoding="utf-8")
+    """判据 1：适配器装成哪个名字是**判据**，不是实现细节（现在钉在 profile 里）。"""
+    src = (PROFILES / "engineering.toml").read_text(encoding="utf-8")
     assert ADAPTER_SNAPSHOT_NAME in src, (
-        f"构建脚本里没有把适配器装成 {ADAPTER_SNAPSHOT_NAME} —— 冻结的 workflow "
+        f"engineering profile 里没有把适配器装成 {ADAPTER_SNAPSHOT_NAME} —— 冻结的 workflow "
         "最后一步写死这个名字，改了它作业就一条用例都收集不到"
     )
+    # 反面：名字不许再回到骨架里 —— 那是「每仓一份」退化成 engineering 专用脚本的征兆。
+    build = BUILD.read_text(encoding="utf-8")
+    assert ADAPTER_SNAPSHOT_NAME not in build, (
+        "适配器文件名又写回 build_snapshot.py 了 —— 骨架只该问 profile「装到哪」")
 
 
 def test_no_private_paths_or_ips_under_gha():
@@ -150,6 +159,36 @@ def test_missing_dest_fails_fast_with_config_code(tmp_path):
     assert not dest.exists(), "判完还顺手造了目录"
 
 
+def test_stage_all_on_a_fresh_dest_is_not_blocked_by_missing_dest(tmp_path, capsys):
+    """`--stage all` 是「从头造」：全新 dest 不许被 MISSING_DEST 挡成退 2（2026-11-21 实测）。
+
+    这条钉子来自一次真事故：`--stage all` 在全新目录上直接退 2，日志只有一行
+    `MISSING_DEST …` —— 而 dest 正是**这一趟要造**的东西。判据只该管 smoke / push
+    （它们必须在已有的快照上干活）。
+    """
+    mod = _load(BUILD, "gha_build_snapshot_for_stage_all")
+    calls = []
+    mod.do_build = lambda a: calls.append("build")
+    mod.do_smoke = lambda a: calls.append("smoke")
+    mod.do_push = lambda a: calls.append("push")
+    dest = tmp_path / "brand-new-snapshot"
+    env = {"GHA_REMOTE": "git@example.invalid:someone/repo.git",
+           "GIT_SSH_COMMAND": "ssh -i /dev/null"}
+    old = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    try:
+        rc = mod.main(["--stage", "all", "--dest", str(dest), "--tmp", str(tmp_path / "tmp")])
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    out = capsys.readouterr().out
+    assert "MISSING_DEST" not in out, "全新 dest 上 --stage all 又被挡了：" + out[-600:]
+    assert rc == 0, f"--stage all 没走完（rc={rc}）：" + out[-600:]
+    assert calls == ["build", "smoke", "push"], calls
+
 def test_smoke_red_is_not_green(tmp_path, capsys):
     """判据 2：冒烟任一段红 ⇒ 退 5（EXIT_SNAPSHOT），不许退 0（卡 E145 问题 2）。"""
     import types
@@ -157,7 +196,9 @@ def test_smoke_red_is_not_green(tmp_path, capsys):
     mod = _load(BUILD, "gha_build_snapshot_for_smoke_red")
     dest = tmp_path / "snapshot"
     dest.mkdir()
-    args = types.SimpleNamespace(dest=str(dest), adapter=str(ADAPTER))
+    # 冒烟跑什么由 profile 说（engineering 那份 = 定向 pytest + ruff + check_docs）
+    prof = mod.gate_profile.load("engineering")
+    args = types.SimpleNamespace(dest=str(dest), adapter=str(ADAPTER), profile=prof)
 
     class _Red:
         returncode = 1
@@ -263,3 +304,171 @@ def test_conftest_shim_only_registers_cov_options():
                 "--no-cov", "--cov-branch"):
         assert opt in text, f"垫片没注册 {opt} —— runner 上 pytest 会在收集前就退出"
     assert "import pytest_cov" in text, "垫片要先探测真插件在不在，装了就不能抢它的参数"
+
+# ---------------------------------------------------------------------------
+# 第二仓：骨架真的不认仓，靠的是 profiles/<仓>.toml 这一层。
+# ---------------------------------------------------------------------------
+
+#: 这些字面只要还在骨架里，就说明「每仓一份」退化成了一份 engineering 专用脚本。
+ENGINEERING_ONLY_LITERALS = (
+    ADAPTER_SNAPSHOT_NAME,
+    "T-AG526",
+    "gate: engineering",
+    "models.whitelist.toml",
+)
+
+
+def test_skeleton_has_no_repo_specific_literals():
+    """判据 1 的反面：骨架（build_snapshot.py）里不许再有 engineering 的形状。"""
+    src = BUILD.read_text(encoding="utf-8")
+    bad = [lit for lit in ENGINEERING_ONLY_LITERALS if lit in src]
+    assert not bad, (
+        f"骨架里还写死着 {bad} —— 那是「每仓一份适配层」还没抽干净；"
+        "第二仓只能靠复制脚本才用得上，两份必然各自漂移"
+    )
+
+
+def test_every_profile_in_the_directory_loads():
+    """判据 1：profiles/ 里每一份都得读得动（拼错的键静默生效 = 配置没人读）。"""
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_profiles")
+    names = mod.list_repos()
+    assert "engineering" in names and "openmaic" in names, (
+        f"profiles/ 里没有这两份：{names} —— 第二仓的适配层必须在仓里，不能只在本机"
+    )
+    for name in names:
+        prof = mod.load(name)   # 不抛 = 通过
+        assert prof["name"] == name
+        assert prof["message"], f"{name}.toml 没给提交标题行"
+
+
+def test_second_repo_profile_has_no_engineering_keys():
+    """验收③：第二仓那份 profile 里，engineering 专属键一个都不许出现。"""
+    text = (PROFILES / "openmaic.toml").read_text(encoding="utf-8")
+    for key in ("TF_PROJECTS_TOML", "models.whitelist.toml", "line/impl-v1"):
+        assert key not in text, (
+            f"openmaic profile 里出现了 engineering 专属的 {key} —— "
+            "那说明适配层还是照着 engineering 抄的，换个仓就再抄一份"
+        )
+
+
+def test_second_repo_profile_turns_the_engineering_machinery_off():
+    """判据 2：node 腿不该被 python 那套机械连坐（适配器/号池桩/台账 trailer 全关）。"""
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_second_repo")
+    prof = mod.load("openmaic")
+    assert prof["adapter"]["enabled"] is False, "node 腿不需要 python 适配器"
+    assert prof["pool"]["stub"] is False, "这个仓没有号池"
+    assert prof["snapshot"]["ledger_exempt"] == [], "这个仓没有台账，不该写豁免块"
+    assert prof["task"] == "", "没有台账却写 Task trailer = 伪造出处"
+    assert prof["snapshot"]["from_remote_workflows"] is False, (
+        "这个仓的 workflow 归它自己；去远端取会把它自己那份换掉"
+    )
+    assert prof["smoke"]["commands"], "至少得跑一条真的判据，不能「配不上就跳过」"
+
+
+def test_unknown_repo_fails_fast_with_config_code(tmp_path):
+    """判据 3：`--repo` 指到不存在的 profile ⇒ 退 2 + PROFILE_INVALID（不是 traceback）。"""
+    env = dict(os.environ)
+    env["GHA_REMOTE"] = "https://example.invalid/someone/repo.git"
+    p = _run([sys.executable, "-X", "utf8", str(BUILD), "--repo", "no-such-repo",
+              "--stage", "smoke", "--dest", str(tmp_path / "snap"),
+              "--tmp", str(tmp_path / "tmp")], env=env)
+    assert p.returncode == 2, (
+        f"profile 不存在却退了 {p.returncode}（2 才是「配置没准备好」）：\n"
+        + (p.stdout + p.stderr)[-1500:]
+    )
+    assert "PROFILE_INVALID" in p.stdout, "退 2 了但没说坏在哪：" + p.stdout[-800:]
+    assert "Traceback" not in p.stderr, "还是抛了栈 —— 调用方分不清是配置还是脚本坏了"
+
+
+def test_second_repo_missing_dest_does_not_ask_for_python_pieces(tmp_path):
+    """判据 3：node 腿缺快照目录时，**不许**先抱怨 python 适配器/垫片/私钥。"""
+    env = dict(os.environ)
+    env["GHA_REMOTE"] = "https://example.invalid/someone/repo.git"
+    env.pop("GIT_SSH_COMMAND", None)
+    env.pop("GITHUB_ACTIONS", None)
+    p = _run([sys.executable, "-X", "utf8", str(BUILD), "--repo", "openmaic",
+              "--stage", "smoke", "--dest", str(tmp_path / "no-such"),
+              "--tmp", str(tmp_path / "tmp")], env=env)
+    out = p.stdout + p.stderr
+    assert p.returncode == 2, out[-1500:]
+    assert "MISSING_DEST" in p.stdout, "没说是快照目录不在：" + out[-800:]
+    for tag in ("MISSING_ADAPTER", "MISSING_CONFTEST_SHIM", "MISSING_GIT_SSH_COMMAND"):
+        assert tag not in p.stdout, (
+            f"node 腿去要了 {tag} —— 那是 engineering 那条 ssh + python 的机械，"
+            "第二仓不该被它连坐"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 两根新骨头：装 workflow、静态判「这棵树是不是我以为的那棵」。
+# ---------------------------------------------------------------------------
+
+
+def test_require_text_bites_when_the_tree_is_wrong(tmp_path, capsys):
+    """`[snapshot].require_text` 必须真的咬人：缺字样 ⇒ 退 5，不是打一行日志继续。
+
+    它挡的是「装错树」这类最贵的失败 —— 装依赖十几分钟，装完才发现跑的不是那个仓。
+    """
+    mod = _load(BUILD, "gha_build_snapshot_for_require_text")
+    (tmp_path / "package.json").write_text('{"engines": {"node": ">=20.0.0"}}', encoding="utf-8")
+    item = [{"path": "package.json", "needle": '"node": ">=22.19.0"'}]
+    with pytest.raises(SystemExit) as exc:
+        mod._require_text(str(tmp_path), item)
+    assert exc.value.code == mod.EXIT_SNAPSHOT, (
+        f"装错树却退了 {exc.value.code}（5 才是「快照形状不对」）"
+    )
+    out = capsys.readouterr().out
+    assert "MISSING_REQUIRED_TEXT" in out, "退 5 了但没说是哪一件缺字样：" + out[-600:]
+    assert "package.json" in out, "没点名是哪份文件：" + out[-600:]
+
+    # 反面：字样在 ⇒ 不抛（否则这条判据就是「永远红」）
+    (tmp_path / "package.json").write_text('"node": ">=22.19.0"', encoding="utf-8")
+    mod._require_text(str(tmp_path), item)
+
+
+def test_require_text_reports_unreadable_file_not_a_traceback(tmp_path, capsys):
+    """文件根本不在 ⇒ 也要算「不一致」退 5，**不是** OSError 的栈。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_require_text_missing")
+    item = [{"path": "nope.json", "needle": "x"}]
+    with pytest.raises(SystemExit) as exc:
+        mod._require_text(str(tmp_path), item)
+    assert exc.value.code == mod.EXIT_SNAPSHOT
+    out = capsys.readouterr().out
+    assert "nope.json" in out and "读不到" in out, out[-600:]
+
+
+def test_workflow_install_missing_src_fails_fast_with_config_code(tmp_path, capsys):
+    """`[workflow].install` 指的源文件不在 ⇒ 退 2 + MISSING_WORKFLOW_SRC（不是 traceback）。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_workflow_install")
+    with pytest.raises(SystemExit) as exc:
+        mod._install_workflows(str(tmp_path), [{"src": "no-such-workflow.yml",
+                                              "dst": ".github/workflows/x.yml"}])
+    assert exc.value.code == mod.EXIT_CONFIG, "缺源文件是配置问题（2），不是快照形状（5）"
+    assert "MISSING_WORKFLOW_SRC" in capsys.readouterr().out
+
+
+def test_workflow_install_writes_into_the_snapshot(tmp_path):
+    """正面：一个真源文件确实被拷进快照的 `<dst>`（骨架不写死装哪一份）。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_workflow_copy")
+    mod._install_workflows(str(tmp_path), [{"src": "conftest_shim.txt",
+                                           "dst": ".github/workflows/probe.yml"}])
+    out = tmp_path / ".github" / "workflows" / "probe.yml"
+    assert out.is_file(), "workflow 没落进快照 —— 推上去一条作业都不会起"
+    assert out.read_bytes() == (GHA / "conftest_shim.txt").read_bytes(), "内容没原样搬"
+
+
+def test_profile_rejects_workflow_dst_escaping_the_snapshot(tmp_path):
+    """跨键约束：`[workflow].install` 的 dst 不许带 `..` / 绝对路径（那是往快照外写）。"""
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_workflow_dst")
+    bad = tmp_path / "probe.toml"
+    bad.write_text(
+        'name = "probe"\n'
+        '[snapshot]\nfrom_remote_workflows = false\n'
+        '[[workflow.install]]\nsrc = "x.yml"\ndst = "../escape.yml"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(mod.ProfileError) as exc:
+        mod.load(str(bad))
+    assert "escape.yml" in str(exc.value), str(exc.value)
+
+

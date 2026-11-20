@@ -1,0 +1,67 @@
+# GHA 云门禁 profile —— OpenMAIC 仓（第二仓，用来证明骨架真的仓无关）
+#
+# 硬约束（验收③）：这份里不许出现任何 engineering 专属键 —— 池配置注入、模型白名单、
+#   主分支名、台账编号。连注释也不写（断言按文件正文 grep）。
+#
+# 与 engineering 那份的差别，正是「骨架 + 适配层」要证明的东西：
+#   * 不装 python 适配器 —— 这个仓的门禁是 vitest，它的 workflow 就是 ci.yml 的 unit 作业
+#     （四个分片，ubuntu-latest），跑什么由仓自己那份 workflow 说了算，不需要借别人的作业名；
+#   * 不从远端取 workflow —— 这个仓的 workflow 归它自己（本 token 也没有 workflow scope，
+#     但这里根本不需要改它：树里带过来的就是对的）；
+#   * 没有号池桩、没有台账豁免块、没有 gates/last.json 这类证据文件；
+#   * 提交不带 Task: trailer —— 这个仓没有台账，硬塞一个会变成假的出处。
+#
+# 键的语义见 ../gate_profile.py 的 SCHEMA。
+
+name = "openmaic"
+# 这个仓的读数由**它自己那份 ci.yml**（unit 四个分片，ubuntu-latest）打出来 —— 构建器只负责
+# 把树推上去，不替它决定跑什么。所以标题行只说「这是一份快照」。
+message = "gate: OpenMAIC tree snapshot, readout from its own ci.yml unit shards"
+# 没有台账 ⇒ 空串（骨架据此不写 Task: trailer）。
+task = ""
+
+[remote]
+env = "GHA_REMOTE"
+# 本机没有挂到该账号的 SSH 公钥；HTTPS 走 credential helper 已经可用。
+transport = "https"
+
+[sync]
+# ★ 实测：这份源树是**浅克隆**（git rev-parse --is-shallow-repository ⇒ true，.git/shallow 里钉着
+#   一个提交），所以 git bundle create … HEAD 打出来的是断链 —— fetch 报
+#   "did not send all necessary objects" / "Could not read <sha>"。那不是网络坏，是历史不完整。
+#   这条路本来也不要它的历史（要的是「此刻树长什么样」），所以用 tree 模式：
+#   git archive 只搬**已跟踪**的内容，快照里只有 base + 构建两笔提交。
+mode = "tree"
+
+[snapshot]
+dir_name = "omgate"
+from_remote_workflows = false
+# 快照里必须真的有这三件：缺了就是装错树（例如 bundle 打成了空历史）。
+require_files = ["package.json", "pnpm-lock.yaml", "vitest.config.ts", ".github/workflows/ci.yml"]
+# 「这棵树是不是我以为的那棵」的静态判据：不联网、不装依赖、几秒。装依赖要十几分钟，
+# 装完才发现装错树是最贵的失败方式，所以这几条挡在它前面。
+require_text = [
+  { path = "package.json", needle = "\"node\": \">=22.19.0\"" },
+  { path = "vitest.config.ts", needle = "tests/**/*.test.ts" },
+  { path = ".github/workflows/ci.yml", needle = "pnpm exec vitest run --shard=" },
+]
+
+[adapter]
+enabled = false
+
+[pool]
+stub = false
+
+[smoke]
+# 冒烟要「几秒、但真的会红」，所以只挑两条**不需要装依赖**的判据：
+#   1) node 版本契约：package.json 的 engines.node 必须仍是 runner 上那个能满足的下限
+#      （真跑一遍 repo 自带的 check-node-engine-contract.mjs 要 node_modules —— 那是
+#       runner 的事，本机装一遍要十几分钟，冒烟不该付这个钱）。
+#   2) 锁文件与工作区清单是否还对得上：--frozen-lockfile 的 runner 装依赖时，
+#      「清单改了、锁没跟上」是唯一会当场炸的形态；--lockfile-only 实测 1.2s。
+# 不在本机跑 vitest —— 那是 runner 的事（ci.yml 的四个分片）。
+commands = [
+  { tag = "NODE_ENGINE", cmd = 'node -e "process.exit(require(\"./package.json\").engines.node === \">=22.19.0\" ? 0 : 1)"' },
+  { tag = "LOCKFILE", cmd = "corepack pnpm install --frozen-lockfile --ignore-scripts --lockfile-only" },
+]
+# 没有派生文档生成器、没有 ruff（这个仓的 lint 在它自己的 workflow 里）。

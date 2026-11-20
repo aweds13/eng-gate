@@ -12799,3 +12799,19 @@ evidence = [
   "test:test_pool_gateway.py::test_http_only_four_paths",
 ]
 gaps = "1. 图像拒收的判词只按状态码分类：classify 对「模型不吃图」仍只看 400/415/422，不看返回体里有没有 image 字样 —— 本卡只钉住这份现状，不搬 magpie 的 seenBody 改写。指针 tools/pool/gateway.py2. 本卡是 SKIP_BY_REDLINE：产品码一个字节都没改，只在 tests 与 README 表 B 加钉；三根支柱（seenBody 改写、imageRefusedWords、refuseSight 后同候选重试）全判不移植。指针 tests/test_pool_gateway.py3. 表 B 那一行走不了这张卡：docs/subsystems/pool/README.md 在落地链的回退名单（RECOUNT_DOCS）里，⓪ 步会先把它 checkout 回 HEAD ⇒ 卡树里手改的表 B 行会被抹掉，落地链也不会替你写回来（③.5 只重算 pool-margin 标记之间，表 B 在标记外）。所以本卡只交测试钉子，表 B 的第 8 行由随后的主树 docs 提交补（体例同 796ea840 队列卡数修正）。指针 tools/pool/landing.py"
+
+[entries."T-AG680"]
+id = "T-AG680"
+title = "GHA云门禁第二仓：构建器按仓取profile（骨架+每仓一份）+ OpenMAIC真vitest读数"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:gates/diag/cmp-e146.log",
+  "file:scripts/cloud/gha/build_snapshot.py",
+  "file:scripts/cloud/gha/gate_profile.py",
+  "file:scripts/cloud/gha/profiles/engineering.toml",
+  "file:scripts/cloud/gha/profiles/openmaic.toml",
+  "file:tests/test_gha_cloud_gate.py",
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "1. engineering 的 GHA 快照上仍有一道门是「本机绝对路径」内债，与本卡无关但会咬下一趟读数：tests/test_pool_limits_data.py:41 的 DOCUMENTED 常量写死仓外号池目录的绝对路径，runner 上必然红（eng-gate 快照那一趟的唯一红门）。指针 tests/test_pool_limits_data.py 与 gates/enggate-logs/win-136403301980.log2. [workflow].install 这根骨头今天没有真使用者：本机 token 无 workflow scope（推 .github/workflows/** 一律 remote rejected），om-gate 自己树里带着 8 份 ci.yml 不需要装 ⇒ 只有单测覆盖，没在真跑里验过。指针 scripts/cloud/gha/build_snapshot.py3. OpenMAIC 那条腿的 vitest 读数不是本构建器打的，是它自己 ci.yml 的 unit 作业（骨架不认识 vitest）；快照是 --force 推的镜像，历史不连续，不能当备份。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md4. sync.mode = tree 是为浅克隆准备的（bundle 会打 did not send all necessary objects），代价是快照提交写成 base: working tree snapshot，与源仓没有共同祖先。指针 scripts/cloud/gha/profiles/openmaic.toml"
