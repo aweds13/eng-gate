@@ -1,0 +1,17 @@
+[entries."T-AG669"]
+id = "T-AG669"
+title = "F14决策模型与systemone：判SKIP_BY_REDLINE，落成ADR与反向钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/decisions/0011-no-systemone.md",
+  "file:tests/test_pool_no_systemone.py",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "test:test_pool_no_systemone.py::test_systemone_endpoint_is_404_without_bearer",
+  "test:test_pool_no_systemone.py::test_production_code_has_zero_hits",
+  "test:test_pool_no_systemone.py::test_adr_exists_and_passes_machine_check",
+  "test:test_pool_no_systemone.py::test_decision_is_written_in_tracked_docs",
+  "file:复盘/卡/卡A381-F14决策模型与systemone-判SKIP_BY_REDLINE.md",
+]
+gaps = "1. 表 B 那一行不由本卡提交：docs/subsystems/pool/README.md 在落地链回退名单（RECOUNT_DOCS）里，⓪ 步会把它 checkout 回 HEAD、③.5 只重算 pool-margin 标记之间 ⇒ 表 B 第 8 行归卡 A373 落地之后的主树 docs 提交，本卡只落 ADR + 反向钉子 + 号池文档 §8。指针 tools/pool/landing.py2. 零命中扫描范围只许 tools/ 与 scripts/ 的 .py：扩到 docs/ 或 tests/ 会咬到本卡自己的 ADR 与钉子文件；裸 jev 会命中云机 instance-id、裸 intent 会命中 intention，都在钉子白名单里点名排除。指针 tests/test_pool_no_systemone.py3. 只做到「不接」这一档：本仓没有 decision 组概念（tools/pool/model_registry.py 的 ModelEntry 七字段里没有组字段），本卡用零命中 + ADR 钉住，不新增任何路由组抽象。指针 docs/decisions/0011-no-systemone.md"
+

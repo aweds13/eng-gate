@@ -12815,3 +12815,20 @@ evidence = [
   "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
 ]
 gaps = "1. engineering 的 GHA 快照上仍有一道门是「本机绝对路径」内债，与本卡无关但会咬下一趟读数：tests/test_pool_limits_data.py:41 的 DOCUMENTED 常量写死仓外号池目录的绝对路径，runner 上必然红（eng-gate 快照那一趟的唯一红门）。指针 tests/test_pool_limits_data.py 与 gates/enggate-logs/win-136403301980.log2. [workflow].install 这根骨头今天没有真使用者：本机 token 无 workflow scope（推 .github/workflows/** 一律 remote rejected），om-gate 自己树里带着 8 份 ci.yml 不需要装 ⇒ 只有单测覆盖，没在真跑里验过。指针 scripts/cloud/gha/build_snapshot.py3. OpenMAIC 那条腿的 vitest 读数不是本构建器打的，是它自己 ci.yml 的 unit 作业（骨架不认识 vitest）；快照是 --force 推的镜像，历史不连续，不能当备份。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md4. sync.mode = tree 是为浅克隆准备的（bundle 会打 did not send all necessary objects），代价是快照提交写成 base: working tree snapshot，与源仓没有共同祖先。指针 scripts/cloud/gha/profiles/openmaic.toml"
+
+[entries."T-AG669"]
+id = "T-AG669"
+title = "F14决策模型与systemone：判SKIP_BY_REDLINE，落成ADR与反向钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/decisions/0011-no-systemone.md",
+  "file:tests/test_pool_no_systemone.py",
+  "file:docs/subsystems/pool/模型与号池.md",
+  "test:test_pool_no_systemone.py::test_systemone_endpoint_is_404_without_bearer",
+  "test:test_pool_no_systemone.py::test_production_code_has_zero_hits",
+  "test:test_pool_no_systemone.py::test_adr_exists_and_passes_machine_check",
+  "test:test_pool_no_systemone.py::test_decision_is_written_in_tracked_docs",
+  "file:复盘/卡/卡A381-F14决策模型与systemone-判SKIP_BY_REDLINE.md",
+]
+gaps = "1. 表 B 那一行不由本卡提交：docs/subsystems/pool/README.md 在落地链回退名单（RECOUNT_DOCS）里，⓪ 步会把它 checkout 回 HEAD、③.5 只重算 pool-margin 标记之间 ⇒ 表 B 第 8 行归卡 A373 落地之后的主树 docs 提交，本卡只落 ADR + 反向钉子 + 号池文档 §8。指针 tools/pool/landing.py2. 零命中扫描范围只许 tools/ 与 scripts/ 的 .py：扩到 docs/ 或 tests/ 会咬到本卡自己的 ADR 与钉子文件；裸 jev 会命中云机 instance-id、裸 intent 会命中 intention，都在钉子白名单里点名排除。指针 tests/test_pool_no_systemone.py3. 只做到「不接」这一档：本仓没有 decision 组概念（tools/pool/model_registry.py 的 ModelEntry 七字段里没有组字段），本卡用零命中 + ADR 钉住，不新增任何路由组抽象。指针 docs/decisions/0011-no-systemone.md"
