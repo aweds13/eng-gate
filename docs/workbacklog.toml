@@ -6944,3 +6944,66 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A386"
+task = "T-AG674"
+title = "F85裸模型id列进v1-models的开关：默认关、只发布读数"
+tree = ".wt/A386"
+spec = "复盘/卡/卡A386-F85裸模型id列进v1-models的开关.md"
+files = [
+  "tools/pool/gateway.py",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A386-F85裸模型id列进v1-models的开关.md",
+  "docs/changelog.d/T-AG674.md"
+]
+depends = [
+  "A372",
+  "A373",
+  "A375",
+  "A380",
+  "A381",
+  "A383",
+  "A384",
+  "A385"
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A387"
+task = "T-AG675"
+title = "F88账号别名与seat合并-判SKIP_NOT_APPLICABLE"
+tree = ".wt/A387"
+spec = "复盘/卡/卡A387-F88账号别名与seat合并-判SKIP_NOT_APPLICABLE.md"
+files = [
+  "tests/test_pool_no_seat_merge.py",
+  "复盘/卡/卡A387-F88账号别名与seat合并-判SKIP_NOT_APPLICABLE.md",
+  "docs/changelog.d/T-AG675.md"
+]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A388"
+task = "T-AG676"
+title = "F22并发闸排队-判SKIP_BY_REDLINE，只钉不排队"
+tree = ".wt/A388"
+spec = "复盘/卡/卡A388-F22并发闸排队-判SKIP_BY_REDLINE.md"
+files = [
+  "tools/pool/lanes.py",
+  "tools/pool/guards.py",
+  "tools/pool/lanes.toml",
+  "tests/test_pool_lanes.py",
+  "复盘/卡/卡A388-F22并发闸排队-判SKIP_BY_REDLINE.md",
+  "docs/changelog.d/T-AG676.md"
+]
+depends = [
+  "A339",
+  "A367"
+]
+risk = "mid"
+status = "pending"
