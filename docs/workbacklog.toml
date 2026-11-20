@@ -7020,6 +7020,12 @@ files = [
   "docs/subsystems/pool/modules.toml",
   "复盘/卡/卡E147-封存指纹的临时索引只有一个名字.md"
 ]
-depends = []
+depends = [
+  "A375",
+  "A380",
+  "A383",
+  "A385",
+  "A386",
+]
 risk = "mid"
 status = "pending"
