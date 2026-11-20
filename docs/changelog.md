@@ -32,6 +32,10 @@
 - 新增 tests/test_pool_session_identity.py（209 行 / 6 钉）：入站头闭集四条、`session_id` 派生零命中、POST 正文键不含身份、四条路径无会话段。
 - tests/test_pool_route_log.py 加 `test_row_shape_is_exactly_eight_keys`（行形状闭集、没有会话维度）；tests/test_wb_dispatch.py 加 `test_resume_auto_without_session_file_refuses_instead_of_inventing_one`（没会话文件退 2、不替你造 id）。
 - docs/subsystems/pool/派活口径.md 新增 §6「会话身份」，把「缺指纹 = 工人口径」写进派活口径。
+## 2026-11-20 T-AG675 F88 账号别名与 seat 合并：判 SKIP_NOT_APPLICABLE
+- 判据：magpie 的 seats.json / planSeatKey / AccountNames 这一族在本仓没有宿主 —— pool 的「座位」是账本稳定 id（E94 起就这样），不是 magpie 可合并的座位对象；账号去重按 id 而不是 label。产品码零改动。
+- 新增 tests/test_pool_no_seat_merge.py（244 行 / 5 钉）：seat 族词表在 tools/ src/ scripts/ 零命中、PATHS 恰好四键、账本没有 window 段、账本按 id 去重、cleared.py 里「别名归并不移植」的锚句还在。
+- 账本不存在时判据 3 走 skip（不 fail），仓外路径由 TF_ACCOUNTS_TOML 指，不写死。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

@@ -12757,3 +12757,16 @@ evidence = [
   "test:test_pool_session_identity.py::test_gateway_inbound_headers_are_exactly_four",
 ]
 gaps = "1. 会话维度只钉在「不许编」这一半：网关入站头是闭集、route_log 行恰好八键、`--resume auto` 没会话文件就退 2 —— 但「同一个会话跨轮次怎么归属到同一条读」仍没有实现，归属仍靠调用方自己保管。指针 tools/wb_session.py2. 指纹只认宿主注入的 `DSH_SESSION_ID`，本仓没有第二来源；宿主不注入时放行且**不写租约账本** —— 于是「这是一次工人口径的派活」只能从账本缺失反推，没有正面的标记位。指针 tools/wb_dispatch.py3. 三份判据文件里有两条是**既有文件追加**的（`tests/test_pool_route_log.py` 加第九/第十条钉子、`tests/test_wb_dispatch.py` 加一条），这两份文件的主人是 A363 与派活链，不是本卡。指针 tests/test_pool_route_log.py"
+
+[entries."T-AG675"]
+id = "T-AG675"
+title = "F88账号别名与seat合并：判SKIP_NOT_APPLICABLE，产品码零改动只钉五个不适用"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_no_seat_merge.py",
+  "test:test_pool_no_seat_merge.py::test_seat_family_vocabulary_is_absent",
+  "test:test_pool_no_seat_merge.py::test_paths_table_is_exactly_four",
+  "test:test_pool_no_seat_merge.py::test_ledger_dedupes_by_id_only",
+]
+gaps = "1. 「账号别名与 seat 合并不适用」这条结论的证据是**否定式**的：grep 零命中 + 路径表恰好四键，能证明今天没有这套东西，但证明不了「以后也不该有」—— 哪天有人真要做账号合并，这张卡的钉子只会红，不会告诉他该怎么判。指针 tests/test_pool_no_seat_merge.py2. 判据只读仓外账本的一份快照（5 个账号、全部没有 window 段）；账本形状一变（加了 window）这条就红，但红色说的是「账本变了」而不是「合并该做了」。指针 tools/pool_accounts.py3. 这一张卡的产品码零改动，是**纯钉子卡**：它不减少任何风险，只把「没有合并」这件事变成会被测出来的事实。指针 tests/test_pool_no_seat_merge.py"
