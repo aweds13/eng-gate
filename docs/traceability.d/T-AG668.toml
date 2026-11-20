@@ -1,0 +1,18 @@
+[entries."T-AG668"]
+id = "T-AG668"
+title = "F96 Context页分段账：只留名字与大小，不搬面板与读回原文"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/prompt_parts.py",
+  "file:tools/pool/gateway.py",
+  "file:tools/pool/route_log.py",
+  "file:tests/test_pool_prompt_parts.py",
+  "text:tools/pool/prompt_parts.py::def parts_of(protocol: str, body: bytes) -> list[dict] | None:",
+  "test:test_pool_prompt_parts.py::test_tokens_of_is_the_documented_estimate",
+  "test:test_pool_prompt_parts.py::test_thirty_tools_collapse_to_twenty_four_with_a_rest_item",
+  "test:test_pool_prompt_parts.py::test_parts_has_four_kinds_in_fixed_order",
+  "file:复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md",
+]
+gaps = "1. 分段账只留名字与大小：tools/pool/prompt_parts.py 记每段的角色名与字节数并粗估 token，不缓存 body、不落原文 —— magpie 那 10 份环形 body 缓存明文不搬（撞 tools/pool/gateway.py 的「不做定时器」纪律）。指针 tools/pool/route_log.py2. tokens_of 与真分词器有偏差：按字节数除以 4 的粗估，没有按模型分词器校准；校准那一半判 SKIP_NOT_APPLICABLE，本卡不引入模型侧依赖。指针 tools/pool/prompt_parts.py3. 规格判据 3 与判据 1 自相矛盾（一个要「无 system/tools ⇒ null」、一个说空段也占位）：实现以判据 1 为准，null 那条钉子改用空 body 钉。指针 复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md"
+

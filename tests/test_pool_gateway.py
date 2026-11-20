@@ -39,6 +39,7 @@ from __future__ import annotations
 import ast
 import datetime as dt
 import http.client
+import inspect
 import json
 import os
 import subprocess
@@ -61,6 +62,7 @@ from pool import (  # noqa: E402
 )
 from pool import model_registry as pool_model_registry  # noqa: E402
 from pool import route as pool_route  # noqa: E402
+from pool import route_log as pool_route_log  # noqa: E402 —— 卡 A380：直接调 append_route
 from pool import sink as pool_sink  # noqa: E402
 from pool.no_window import NO_WINDOW  # noqa: E402 —— 起子进程必须带（卡 148）
 
@@ -1737,4 +1739,125 @@ def test_bare_ids_are_listed_but_not_routed(
     assert status == 404, status
     assert "不在批准集里" in body.decode("utf-8")
     assert stub.calls == [], "裸名被放行了：发布读数不等于接请求"
+
+
+# ================================================================ 卡 A380（F96）：分段账 parts
+
+
+def _run_body(env: Path, forward: Any, body: bytes, *, caller: str = "alice",
+              protocol: str = gateway.PROTOCOL_CHAT) -> gateway.Outcome:
+    """同 `_run`，但**自己给 body**（`_run` 里的 body 是写死的 b'{"model":"x"}'）。"""
+    return gateway.route_once(
+        pool="codebuddy", model=MODEL, caller=caller, forward=forward, protocol=protocol,
+        body=body, now=NOW, root=env,
+        endpoints={"codearts": [CHAT_URL, MSG_URL], "workbuddy": [CHAT_URL, MSG_URL]},
+        rpm_limits={}, stamps={}, ledger=_ledger(_row(SEAT_A)), scopes={})
+
+
+def _prompt_body() -> bytes:
+    return json.dumps({
+        "model": MODEL,
+        "system": "你是派活器：只回一句话。",
+        "tools": [{"name": "read_file", "description": "读一个文件", "input_schema": {}}],
+        "messages": [{"role": "user", "content": "跑一下门"}],
+    }, ensure_ascii=False).encode("utf-8")
+
+
+def test_route_log_line_carries_parts(env: Path) -> None:
+    """★ 判据 3：落账的行里有第九个键 `parts`，四段齐全、顺序固定。"""
+    outcome = _run_body(env, _Forward(_ok()), _prompt_body())
+    assert outcome.logged is True
+    row = _route_log(env)[-1]
+    assert isinstance(row["parts"], list), row
+    assert [part["kind"] for part in row["parts"]] == ["system", "tools", "results", "chat"]
+    assert row["parts"][0]["tokens"] > 0
+    assert [item["name"] for item in row["parts"][1]["items"]] == ["read_file"]
+    # 正文不进账：这条请求里没有任何哨兵，但形状上就不许有第五个键（名字之外的自由文本）。
+    for part in row["parts"]:
+        assert set(part) == {"kind", "tokens", "items"}
+
+
+def test_route_log_writes_null_parts_when_it_cannot_say(env: Path) -> None:
+    """★ 判据 3：**说不出来就写 null**，不是 `[]`。
+
+    ★ 与卡规格的一处出入（如实记）：卡规格举的例子是「body 里没有 system / 没有 tools」，
+      但判据 1 又要求本仓认得的四类**空着也占位** —— 那种 body 仍然能算出四段（后两段是零），
+      不是「说不出来」。所以这条钉子改用**真说不出来**的输入：`route_once` 手上没有可解析的
+      body（`b""`，例如内部调用方不传 body）。两条判据只有这一处对不上，已在卡规格「诚实边界」
+      里写明。
+    """
+    outcome = _run_body(env, _Forward(_ok()), b"")
+    assert outcome.logged is True
+    row = _route_log(env)[-1]
+    assert row["parts"] is None, "说不出来要写 null，不许写 []（0 是「量过，一点都没有」）"
+
+
+def test_parts_of_a_prompt_without_system_or_tools_is_still_four_lines(env: Path) -> None:
+    """没有 `system` / 没有 `tools` 的请求：四段照样在，前两段是**零**（不是缺席）。
+
+    ★ 这条是判据 1「空段也占位」在**落盘行**上的那一面：读者不该靠「少了一行」去猜。
+    """
+    body = json.dumps({"model": MODEL, "messages": [{"role": "user", "content": "你好"}]},
+                      ensure_ascii=False).encode("utf-8")
+    assert _run_body(env, _Forward(_ok()), body).logged is True
+    row = _route_log(env)[-1]
+    parts = row["parts"]
+    assert [part["kind"] for part in parts] == ["system", "tools", "results", "chat"]
+    assert parts[0] == {"kind": "system", "tokens": 0, "items": []}
+    assert parts[1] == {"kind": "tools", "tokens": 0, "items": []}
+    assert parts[3]["tokens"] > 0
+
+
+def test_append_route_default_parts_is_null(env: Path) -> None:
+    """★ 判据 3（route_log 侧）：不传 `parts` 与传 `None`，落盘都是 `null` —— 默认值不是 `[]`。"""
+    pool_route_log.append_route(card="A380", attempt=1, asked=MODEL,
+                                tried=[{"model": MODEL, "fail": ""}], served=MODEL,
+                                status=pool_route_log.STATUS_SERVED, started_at=None,
+                                root=env)
+    pool_route_log.append_route(card="A380", attempt=2, asked=MODEL,
+                                tried=[{"model": MODEL, "fail": ""}], served=MODEL,
+                                status=pool_route_log.STATUS_SERVED, started_at=None,
+                                root=env, parts=None)
+    rows = _route_log(env)
+    assert rows[0]["parts"] is None
+    assert rows[1]["parts"] is None
+
+
+def test_http_route_replay_carries_parts_and_counts_bad_lines(start_server: Any,
+                                                             env: Path) -> None:
+    """★ 判据 4：只读面把新键**自动**带出去；坏行仍如实计数、且不拖垮好行。
+
+    体例照 `test_http_serves_route_replay`（起真服务 → POST 带 `X-Pool-Caller` → GET 读回）。
+    """
+    port = start_server(_Stub(_ok()))
+    posted = _request(port, "POST", "/v1/chat/completions",
+                      body=json.loads(_prompt_body()), headers={"X-Pool-Caller": "alice"})
+    assert posted[0] == 200
+    status, _, body = _request(port, "GET", "/v1/pool/routes?limit=5")
+    assert status == 200
+    data = json.loads(body)
+    assert data["total"] >= 1
+    assert data["data"][-1]["card"] == "gw:alice"
+    assert "parts" in data["data"][-1]
+    assert [part["kind"] for part in data["data"][-1]["parts"]] == [
+        "system", "tools", "results", "chat"]
+
+    # 坏行钉子：手工追加一行不是 JSON 的 —— 只读面仍要 200，坏行计数 1，好行照样带 parts。
+    log = env / "gates" / "diag" / "wb-route.jsonl"
+    with log.open("a", encoding="utf-8") as handle:
+        handle.write("{bad json" + chr(10))
+    status, _, body = _request(port, "GET", "/v1/pool/routes?limit=5")
+    assert status == 200
+    data = json.loads(body)
+    assert data["bad_lines"] == 1
+    assert data["data"][-1]["card"] == "gw:alice"
+    assert "parts" in data["data"][-1]
+
+
+def test_log_signature_takes_parts_not_body() -> None:
+    """★ 判据 5：`_log` 收的是**算好的** parts，不是 body（不许在写账处再留一份正文）。"""
+    params = inspect.signature(gateway._log).parameters
+    assert "body" not in params
+    assert set(params) == {"base", "caller", "model", "attempts", "served", "status",
+                           "started_at", "parts"}
 

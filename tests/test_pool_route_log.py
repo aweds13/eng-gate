@@ -25,7 +25,7 @@ magpie 的解法（`internal/gateway/trace.go` 包注释）不是事后读日志
 | `test_missing_file_is_empty_not_error` | 文件不在 ⇒ `([], 0)`，不是错误 |
 | `test_broken_line_is_reported` | 坏行跳过但**如实计数**，不许静默当空 |
 | `test_status_vocabulary_closed` | `status` 四个值的闭集，第五个必须抛 |
-| `test_row_shape_is_exactly_eight_keys` | 行形状恰好八键，且**没有**会话维度（F48 / 卡 A382） |
+| `test_row_shape_is_exactly_nine_keys` | 行形状恰好九键（A380 加 `parts`），**没有**会话维度 |
 
 ★ 一律用 `--root` / `root=` 指临时目录 —— **不往真的 `gates/diag/` 里写**。
 """
@@ -279,8 +279,12 @@ def test_status_vocabulary_closed(env: Path) -> None:
 # ================================================================ ⑩ 行形状闭集（卡 A382 / F48）
 
 
-def test_row_shape_is_exactly_eight_keys(env: Path) -> None:
-    """行的形状**恰好八键**，且**没有**会话维度 —— 这是闭集钉，不是欠账单。
+def test_row_shape_is_exactly_nine_keys(env: Path) -> None:
+    """行的形状**恰好九键**，且**没有**会话维度 —— 这是闭集钉，不是欠账单。
+
+    ★ 卡 A380（F96）在末尾加了第九键 `parts`（Context 页分段账），并把它加进这里的闭集：
+      这条钉子挡的是「顺手加个字段」，不是「永远停在八键」—— 加键就回来改这里，
+      与 `tools/pool/route_log.py` 的 row 一起改。**没有**会话维度那一半一个字没松。
 
     ★ 为什么不是 `xfail(strict=True)` 闹钟：闭集是**阳性**断言 —— 哪天有人加 `"session"`
       键，它当场红，含义明确（「改了形状就回来改这份规格」）。写成 xfail 会把一条**决定**
@@ -291,7 +295,7 @@ def test_row_shape_is_exactly_eight_keys(env: Path) -> None:
       只能由调用方传；而网关今天不认任何会话头（F48 判据 1）。**在没有一个可信来源之前加这个键，
       就是逼下游拿空串当真值** —— 正是 F48 要禁的那件事。
     """
-    keys = ["asked", "at", "attempt", "card", "served", "started_at", "status", "tried"]
+    keys = ["asked", "at", "attempt", "card", "parts", "served", "started_at", "status", "tried"]
     forbidden = {"session", "caller", "conversation", "session_id", "conversation_id"}
 
     _dispatch(env, tried=[{"model": M1, "fail": ""}], served=M1)
@@ -300,7 +304,7 @@ def test_row_shape_is_exactly_eight_keys(env: Path) -> None:
     assert bad == 0, "好记录不该被算坏行"
     assert len(rows) == 1, f"该恰好一条，实际 {len(rows)} 条"
     assert sorted(rows[0]) == keys, (
-        f"行形状变了：{sorted(rows[0])}；规格写死的八键是 {keys} —— "
+        f"行形状变了：{sorted(rows[0])}；规格写死的九键是 {keys} —— "
         f"要加键先改这份钉子和 docs/subsystems/pool/事后判据清单.md，三处一起改"
     )
     assert forbidden & set(rows[0]) == set(), (

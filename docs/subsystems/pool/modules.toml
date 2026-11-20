@@ -158,6 +158,11 @@ duty = "队列解析 + 文件级冲突域 + 拓扑分层 + 同层贪心排批（
 cli = "`wb_plan.py`、`wb_batch.py`"
 
 [[module]]
+name = "prompt_parts.py"
+duty = "请求 prompt 的**分段账**（卡 A380，对等 magpie `internal/gateway/prompt.go` 的前半根支柱）：四类 `system / tools / results / chat` 只留**名字与大小**，正文一个字不留；四段空着也占位（`tokens: 0, items: []`），每段最多 24 项、超出并成一项；`tokens_of` 是**可复算的估算**（ASCII 四字符一 token、其余一字符一 token），不是分词器；坏输入给 `None`（「说不出来」），不给 `[]`；纯函数，无缓存、无后台线程"
+cli = "无（被 `gateway.route_once` 在落账前调一次）"
+
+[[module]]
 name = "projects.py"
 duty = "项目索引（`infra/pool/projects.toml`）只读 + 三条硬判据：root 存在 / 两项目不撞 root / 树在白名单内"
 cli = "`wb_project.py`"

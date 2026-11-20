@@ -60,6 +60,7 @@ from pool import holds as pool_holds  # noqa: E402 —— 窗口维度的模型�
 from pool import lanes as pool_lanes  # noqa: E402
 from pool import model_registry as pool_model_registry  # noqa: E402 —— 禁用表判据
 from pool import models as pool_models  # noqa: E402
+from pool import prompt_parts as pool_prompt_parts  # noqa: E402 —— 分段账（卡 A380）
 from pool import route as pool_route  # noqa: E402
 from pool import route_log as pool_route_log  # noqa: E402
 from pool import rpm as pool_rpm  # noqa: E402
@@ -613,13 +614,18 @@ def _attempt_no(caller: str, model: str, base: Path) -> int:
 
 
 def _log(base: Path, *, caller: str, model: str, attempts: Sequence[Attempt], served: str,
-         status: str, started_at: float) -> bool:
-    """落 wb-route.jsonl。★ tried 为空**不落**（append_route 自己不拒，纪律在这里守）。"""
+         status: str, started_at: float, parts: Sequence[dict] | None = None) -> bool:
+    """落 wb-route.jsonl。★ tried 为空**不落**（append_route 自己不拒，纪律在这里守）。
+
+    `parts` 是**已经算好**的分段账（卡 A380）：本函数只**照传**，不接 body、不自己拆 ——
+    拆一次要在调用方（`route_once` 手上有 protocol 与原始 body）做，这里再收一份 body
+    等于把正文在内存里多留一份，也把「纯函数只在一处」的边界破了。
+    """
     if not attempts:
         return False
     pool_route_log.append_route(card=f"gw:{caller}", attempt=_attempt_no(caller, model, base),
                                 asked=model, tried=_tried_entries(attempts), served=served,
-                                status=status, started_at=started_at, root=base)
+                                status=status, started_at=started_at, root=base, parts=parts)
     return True
 
 
@@ -718,8 +724,10 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
                                 status=int(reply.status),
                                 why=_why(reply) if kind is not None else ""))
         if kind is None:
+            # 分段账在**落账那一刻**才算（body 只在这一层手上）：说不出来 ⇒ None ⇒ 账里写 null。
             return _served(base, caller=caller, model=model, attempts=attempts,
-                           reply=reply, started_at=started_at, seat=seat)
+                           reply=reply, started_at=started_at, seat=seat,
+                           parts=pool_prompt_parts.parts_of(protocol, body))
         if (protocol == PROTOCOL_SEARCH
                 and int(reply.status) not in pool_quota.SEARCH_REFUSED_STATUS):
             # 判据 4：搜索路径上非拒绝类错误（500 / 超时 / other / 413 / 400…）⇒ **就地结束**。
@@ -728,6 +736,7 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
                             started_at=started_at,
                             reason=(f"上游 {reply.status} 不是拒绝类（{kind}）"
                                     "⇒ 搜索路径就地结束，不换下一个 key"))
+
         if kind == KIND_RATE:
             if pool_sink.should_sink(pool_sink.KIND_RATE, routing, on=sink_on):
                 pool_sink.sink(key, root=base)
@@ -755,7 +764,8 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
 
     return _exhausted(protocol, base=base, caller=caller, model=model, attempts=attempts,
                       replies=replies, skipped=skipped, endpoint_missing=endpoint_missing,
-                      earliest=earliest, started_at=started_at, clock=clock)
+                      earliest=earliest, started_at=started_at, clock=clock,
+                      parts=pool_prompt_parts.parts_of(protocol, body))
 
 
 def _why(reply: Reply) -> str:
@@ -794,12 +804,12 @@ def _stopped(base: Path, *, caller: str, model: str, attempts: list[Attempt], re
 
 
 def _served(base: Path, *, caller: str, model: str, attempts: list[Attempt], reply: Reply,
-            started_at: float, seat: str) -> Outcome:
+            started_at: float, seat: str, parts: Sequence[dict] | None = None) -> Outcome:
     headers = {k: v for k, v in (reply.headers or {}).items() if k.lower() not in HOP_HEADERS}
     headers["X-Pool-Tried"] = "; ".join(a.label for a in attempts)
     logged = _log(base, caller=caller, model=model, attempts=attempts,
                   served=f"{seat}/{model}", status=pool_route_log.STATUS_SERVED,
-                  started_at=started_at)
+                  started_at=started_at, parts=parts)
     return Outcome(status=int(reply.status), headers=headers, body=reply.body,
                    chunks=reply.chunks, attempts=tuple(attempts), logged=logged)
 
@@ -807,7 +817,7 @@ def _served(base: Path, *, caller: str, model: str, attempts: list[Attempt], rep
 def _exhausted(protocol: str, *, base: Path, caller: str, model: str, attempts: list[Attempt],
                replies: Sequence[Reply], skipped: list[str], endpoint_missing: list[str],
                earliest: dt.datetime | None, started_at: float,
-               clock: dt.datetime) -> Outcome:
+               clock: dt.datetime, parts: Sequence[dict] | None = None) -> Outcome:
     if not attempts:
         detail = "；".join(endpoint_missing or skipped) or "一个候选都没试到"
         if endpoint_missing:
@@ -825,7 +835,8 @@ def _exhausted(protocol: str, *, base: Path, caller: str, model: str, attempts: 
             headers["Retry-After"] = str(seconds)
         detail = "；".join(a.label for a in attempts)
         logged = _log(base, caller=caller, model=model, attempts=attempts, served="",
-                      status=pool_route_log.STATUS_QUOTA_BLOCKED, started_at=started_at)
+                      status=pool_route_log.STATUS_QUOTA_BLOCKED, started_at=started_at,
+                      parts=parts)
         return _fail(protocol, 429, f"全部候选都是额度/限流类失败：{detail}", headers=headers,
                      attempts=attempts, logged=logged)
 
@@ -836,13 +847,13 @@ def _exhausted(protocol: str, *, base: Path, caller: str, model: str, attempts: 
         headers["X-Pool-Tried"] = "; ".join(a.label for a in attempts)
         headers.setdefault("Content-Type", "application/json; charset=utf-8")
         logged = _log(base, caller=caller, model=model, attempts=attempts, served="",
-                      status=pool_route_log.STATUS_ALL_FAILED, started_at=started_at)
+                      status=pool_route_log.STATUS_ALL_FAILED, started_at=started_at, parts=parts)
         return Outcome(status=int(reply.status), headers=headers, body=reply.body,
                        chunks=reply.chunks, attempts=tuple(attempts), logged=logged)
 
     detail = "；".join(a.label for a in attempts)
     logged = _log(base, caller=caller, model=model, attempts=attempts, served="",
-                  status=pool_route_log.STATUS_ALL_FAILED, started_at=started_at)
+                  status=pool_route_log.STATUS_ALL_FAILED, started_at=started_at, parts=parts)
     return _fail(protocol, 502, f"全部候选都失败了：{detail}", attempts=attempts, logged=logged)
 
 

@@ -27,7 +27,19 @@ r"""路由回放：**谁被试过、谁真答了** —— 在做决定的地方�
     {"card": "A363", "attempt": 1, "asked": "m1",
      "tried": [{"model": "m1", "fail": "429 限流（第 1 拍）"},
                {"model": "m2", "fail": ""}],
-     "served": "m2", "status": "served", "started_at": 1761900000.0, "at": 1761900123.4}
+     "served": "m2", "status": "served", "started_at": 1761900000.0, "at": 1761900123.4,
+     "parts": [{"kind": "system", "tokens": 12,
+                "items": [{"name": "system", "tag": "prompt", "n": 1, "tokens": 12}]},
+               {"kind": "tools", "tokens": 0, "items": []},
+               {"kind": "results", "tokens": 0, "items": []},
+               {"kind": "chat", "tokens": 3,
+                "items": [{"name": "turn 1", "tag": "user", "n": 1, "tokens": 3}]}]}
+
+`parts` 是**请求 prompt 的分段账**（卡 A380 · F96）：只有名字与大小，
+**一个字段都不装正文**（构造在 `tools/pool/prompt_parts.py`，本模块照传）。它是**第九个键、
+后加的**：老账没有这个键（不回填），读回侧 `row.get("parts")` 拿不到就是「没人量过」。
+说不出来的时候写 `null` —— **不写 `[]`**：`[]` 会被读成「量过，一类都没有」，
+而 `null` 才是「没量」（口径同 `docs/subsystems/pool/模型与号池.md:161-163`）。
 
 `tried` **按真实顺序**，不是按白名单顺序、不是排序后的；`fail` 是一句**原因**（不是正文，
 也不是凭据），写入时按 `MAX_FAIL` 截断 —— 那是**长度闸**，不是内容判据：真正的
@@ -140,6 +152,7 @@ def append_route(
     status: str,
     started_at: float | None,
     root: Path | None = None,
+    parts: Sequence[dict] | None = None,
 ) -> Path:
     """一行一轮，落在**做决定的地方**（照 `trace.go` 包注释）。
 
@@ -147,6 +160,9 @@ def append_route(
       （`tried` 的次序**就是**真实尝试次序 —— 打乱或重排等于篡改判据 3）。
     ★ `tried` 为空**不拒**（有的轮次确实没有可记的顺序，比如额度挡住压根没开工），
       但那种轮次该不该落一条由调用方定：本模块只保证**传什么写什么**。
+    ★ `parts` 加在**参数表末尾**（卡 A380）：已有的八个参数顺序与名字一个不动 —— 生产
+      调用方 `tools/pool/trae_dispatch.py:280` 与 `gateway.py` 的老调用都是关键字调用，
+      但不许赌这一点。`None` ⇒ 落盘 `null`（「说不出来」），**不折叠成 `[]`**。
     """
     if status not in STATUSES:
         raise RouteError(
@@ -168,6 +184,7 @@ def append_route(
         "status": status,
         "started_at": started_at,
         "at": time.time(),
+        "parts": parts,
     }
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")

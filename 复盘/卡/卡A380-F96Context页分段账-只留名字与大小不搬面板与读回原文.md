@@ -1,4 +1,4 @@
-# 卡 A380（草稿）：F96 —— 逐部分拆 prompt、只留名字与大小（窄口 PORT + 三半 SKIP）
+# 卡 A380（已实现，读数见「实测读数」）：F96 —— 逐部分拆 prompt、只留名字与大小（窄口 PORT + 三半 SKIP）
 
 > 台账号 `T-AG668`｜分区 A（magpie 移植 / 号池 pool）｜树 `.wt/A380`｜层 判据层 + 数据形状｜基准 `6573205b`（立卡时主树 HEAD，2026-11-20 02:20 实读）｜depends A371、A372、A363、E143
 > depends 说明：**A372**（F56 搜索多 key）与本卡**同域** `tools/pool/gateway.py` + `tests/test_pool_gateway.py`，**A371**（F30 账号导入）与本卡同域 `docs/subsystems/pool/modules.toml`；两张今天都是 `pending`，不给本卡写 `depends` 就会被 `tools/pool/plan.py:321-327` 拒单（逐字 `files 相交 …（同一文件两个写者；要共存就给其中一张写 depends）`）。**A363**（`tools/pool/route_log.py` 的拥有者）是本卡要加**行级新键**的那本账的作者；**E143**（窗口 / 回复上限的「知道就说数，不知道就说 null」）是本卡 `null` 口径的先例。四张里 A371 / A372 未 done，其余 done。
@@ -105,7 +105,7 @@ def parts_of(protocol: str, body: bytes) -> list[dict] | None: ...
 
 ### 判据 6 · 反向变异 ≥3 条（每条真改真跑真复原，`sha256` 自证）
 
-脚本落 `gates/diag/_rev_A380.py`（`.gitignore:70/76` 已忽略 `gates/diag/*`，只有 `gate_lock.py` 被 `:77` 放行 —— 所以脚本与日志都不进 git）。做法照 `复盘/卡/卡E143-F86上下文窗口与回复上限-窗口读数发布成可核元数据.md` 的判据 5：每条变异记改前 `sha256`、真改、跑对应选测、断言退非零、还原、再记 `sha256`，末行打「结论：N/N 条全部咬住，收尾绿。」。
+脚本落 `gates/diag/_rev_380.py`（`.gitignore:70/76` 已忽略 `gates/diag/*`，只有 `gate_lock.py` 被 `:77` 放行 —— 所以脚本与日志都不进 git）。做法照 `复盘/卡/卡E143-F86上下文窗口与回复上限-窗口读数发布成可核元数据.md` 的判据 5：每条变异记改前 `sha256`、真改、跑对应选测、断言退非零、还原、再记 `sha256`，末行打「结论：N/N 条全部咬住，收尾绿。」。
 
 | # | 改哪一行（锚点原文） | 哪条判据红 |
 |---|---|---|
@@ -115,7 +115,7 @@ def parts_of(protocol: str, body: bytes) -> list[dict] | None: ...
 | M4 | `route_log.py` 里 `row = {...}` 的 `parts` 值从 `part_list` 改成 `part_list or []` | 判据 3 的「说不出来要写 null」那条红 |
 | E1 | **只改注释**：在 `prompt_parts.py` 模块 docstring 末尾加一句中文说明（不含任何被扫字面） | 全绿（安静对照 —— 证明上面四条钉的是行为不是文件指纹） |
 
-- **怎么证明**：`python -X utf8 gates/diag/_rev_A380.py` 退 0，且日志里 M1–M4 四条各自打出「预期红 → 实测红」，E1 打出「预期绿 → 实测绿」。
+- **怎么证明**：`python -X utf8 gates/diag/_rev_380.py` 退 0，且日志里 M1–M4 四条各自打出「预期红 → 实测红」，E1 打出「预期绿 → 实测绿」。
 
 ## 交付（逐文件）
 
@@ -138,12 +138,34 @@ cd .wt/A380
 python -X utf8 -m pytest tests/test_pool_prompt_parts.py tests/test_pool_gateway.py tests/test_pool_route_log.py -q -o addopts= --no-cov
 python -X utf8 -m ruff check tools/pool/prompt_parts.py tools/pool/route_log.py tools/pool/gateway.py
 python -X utf8 scripts/gen_pool_readme.py --check
-python -X utf8 gates/diag/_rev_A380.py
+python -X utf8 gates/diag/_rev_380.py
 ~~~
 
 - 第一条必须**全绿**；`-o addopts= --no-cov` 不能省（`pyproject.toml:51` 的 `addopts` 带 `--cov-fail-under=70`）。基线（今天，`dce8d904`）：`tests/test_pool_route_log.py` 9 passed、`tests/test_pool_gateway.py` 72 条全绿。
 - 第二条：`ruff` 不许有新增告警（tools/pool/prompt_parts.py 是新文件，`F401` / `E501` 一类都要自己先清）。
 - 第三条：加 `[[module]]` 之后必须退 0；**不加就退 1 并点名** —— 这条既是验收也是判据（生成器自己会咬）。
+
+## 实测读数（2026-11-20 04:20，树 `.wt/A380`，HEAD `febb0648`）
+
+> ★ 抬头基准写 `6573205b`、验收基线写 `dce8d904`，而本树 `git rev-parse --short HEAD` 实读是 `febb0648` —— 三处不同，下面读数一律以本树实测为准。
+
+- `python -X utf8 -m pytest tests/test_pool_prompt_parts.py tests/test_pool_gateway.py tests/test_pool_route_log.py -q -o addopts= --no-cov -p no:xdist` ⇒ **退 0**，`128 passed in 15.12s`。
+- `tests/test_pool_route_log.py` 单跑 ⇒ `9 passed`（与验收基线写的 9 相同，一条没破）。
+- `python -X utf8 -m ruff check tools/pool/prompt_parts.py tools/pool/route_log.py tools/pool/gateway.py` ⇒ **退 0**，`All checks passed!`。
+- `python -X utf8 scripts/gen_pool_readme.py --check` ⇒ **退 1**，逐行点名：第 12 行 47→48 个 py / 21297→21525 行；第 26 行 `gateway.py` 1300→1310；第 52 行起整段错位（应为 `prompt_parts.py` 那行）。
+  ★ 这**不是**漏做，也**不是**能在本树里修好的：`docs/subsystems/pool/README.md` 在卡域外（本卡不许手改）。证法：同一棵 HEAD 树的副本里拷进改后的四个文件 → 跑一次不带 `--check` 的生成器（`[OK  ] 写了 docs/subsystems/pool/README.md（53 个文件 / 21525 行 / 2026-11-20；行尾 '\r\n'）`）→ 再 `--check` ⇒ **退 0**（`[OK  ] … 与现算一致`）。落地链 `tools/pool/landing.py:650 refresh_derived_before_gate` 就是「先写盘再 --check」，落地时自动重算。
+- 变异：`python -X utf8 gates/diag/_rev_380.py` ⇒ **退 0**；`gates/diag/_rev_380_result.txt` 末行 `结论：4/4 条全部咬住，收尾绿。`。逐条咬住的是：M1 → `test_tokens_of_is_the_documented_estimate`；M2 → `test_secret_never_reaches_the_parts`；M3 → `test_thirty_tools_collapse_to_twenty_four_with_a_rest_item` + `test_rest_item_sums_the_collapsed_tokens`；M4 → `test_route_log_writes_null_parts_when_it_cannot_say` + `test_append_route_default_parts_is_null`；E1（只改注释）⇒ rc=0 安静。每条改前改后都核了 `sha256[:16]`，还原后与原值相同。
+- 改动量（`git diff --stat`，不含两个新文件）：`docs/subsystems/pool/modules.toml` +5、`tests/test_pool_gateway.py` +124、`tools/pool/gateway.py` +32/−12、`tools/pool/route_log.py` +19/−1（合计 +168/−12）；新增未跟踪 `tools/pool/prompt_parts.py`（201 行）与 `tests/test_pool_prompt_parts.py`（305 行）。
+
+## 诚实边界（做不到 / 判不了 / 与规格有出入，逐条）
+
+1. **判据 3 的第二条与判据 1 自相矛盾**：规格要求「body 里没有 `system` / 没有 `tools` 的请求，该行 `parts` 是 `null`」，但判据 1 明文要求「空段也占位成 `tokens: 0, items: []`」⇒ 没有 system / tools 的 body **照样算得出四段**，不是「说不出来」。处理：以判据 1 为准（它是数据形状的唯一真源），`null` 那条钉子改用**真说不出来**的输入（`body=b""`），另加一条正面钉 `test_parts_of_a_prompt_without_system_or_tools_is_still_four_lines` 钉死「没有 system/tools 也是四段」。逐字断言 `assert row["parts"] is None, "说不出来要写 null，不许写 []（0 是「量过，一点都没有」）"` 原样保留。
+2. **M1 的算术不成立**：规格说 `return len(text) // 4 + other` 会让 `tokens_of("abcdefgh")` 从 2 变 1 —— 实测 `len("abcdefgh") // 4 == 2`，**不会变**。真正分得开的是**非 4 倍数**（`"abcde"`：原式 `(5+3)//4=2`，变异式 `5//4=1`）。处理：钉子照规格同时钉 `"abcd"` 与 `"abcdefgh"`，**另加** `tokens_of("abcde") == 2`，M1 才真咬住。
+3. **M2 / M3 的锚点与规格字面不同**：规格写 `items.append({"name": tool["name"], ...})` 与 `if len(items) > prompt_items:`，而实现里没有这两行（工具项走 `_merge(...)`、折叠走 `_collapse()` 里的 `if len(ordered) > PROMPT_ITEMS:`）。处理：按**等价行为**改写锚点（M2 把工具项的 name 换成 description 前 80 字、M3 把 24 改成 99），脚本 docstring 里已逐字写明这处改写。
+4. **变异脚本文件名**：判据 6 原文写 `gates/diag/_rev_A380.py`，本次按派活指令落成 `gates/diag/_rev_380.py`（只差一个下划线；两者都在 `.gitignore` 的 `gates/diag/*` 忽略范围内，都不入库）。内容与判据 6 的要求一致。
+5. **`gen_pool_readme.py --check` 在本树里退 1 是预期**（理由与证法见上节）。要让这条命令在本树退 0，必须改卡域外的 `docs/subsystems/pool/README.md` —— 本卡不做，留给落地链的 `refresh_derived_before_gate`。
+6. **未坐实项 3 仍未量**：`tokens_of` 与真分词器的偏差有多大，本卡没有量（本仓没有分词器）。本卡只承诺**口径可复算**，不承诺精度。
+7. **未坐实项 4 已在落地前重核**：`route_once` 的生产调用方今天仍只有 `tools/pool/gateway.py:1134-1138` 一处（`grep -rn "route_once(" tools/ scripts/` 实读）；A372 落地后若 `tools/pool/search.py` 成为第二个调用方，它传 `body` 与否不影响本卡（`parts` 参数有默认值 `None`）。
 
 ## 不许做
 

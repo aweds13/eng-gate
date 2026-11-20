@@ -12858,3 +12858,21 @@ evidence = [
   "file:tests/test_pool_limits_data.py",
 ]
 gaps = "1. 判据 1 现在钉的是规则（隔离根里自建 infra/pool/、以及没有 infra/pool/ 时的回落），没有再断言「本机真实位址」—— 「今天这台机器的号池目录恰好是 D:/repo/infra/pool」这件事不再有测试看着。它是环境事实、不是规矩，但换机器后「读的是不是人以为的那份」要靠人肉确认一次（limits.limits_path() 实跑）。指针 tools/pool/limits.py2. 同一个「宿主机绝对路径」形状在别处还有：tests/test_ci_portability.py 的 R2 白名单是刻意保留的（它测的就是「这批字面还在」），本卡没动；docs/subsystems/pool/README.md 与 modules.toml 里那条路径是生成器产物，改生成器才有效。指针 tests/test_ci_portability.py3. 本卡只在卡树与本机验证，GHA 上那一趟要等下一次把 engineering 快照推上 eng-gate 才有新读数 —— 判据 4 的「GHA 不再靠这条红」本轮是推理 + 本机复现（隔离根模拟别的盘），不是 runner 实跑。指针 gates/enggate-logs/win-136403301980.log"
+
+[entries."T-AG668"]
+id = "T-AG668"
+title = "F96 Context页分段账：只留名字与大小，不搬面板与读回原文"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/prompt_parts.py",
+  "file:tools/pool/gateway.py",
+  "file:tools/pool/route_log.py",
+  "file:tests/test_pool_prompt_parts.py",
+  "text:tools/pool/prompt_parts.py::def parts_of(protocol: str, body: bytes) -> list[dict] | None:",
+  "test:test_pool_prompt_parts.py::test_tokens_of_is_the_documented_estimate",
+  "test:test_pool_prompt_parts.py::test_thirty_tools_collapse_to_twenty_four_with_a_rest_item",
+  "test:test_pool_prompt_parts.py::test_parts_has_four_kinds_in_fixed_order",
+  "file:复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md",
+]
+gaps = "1. 分段账只留名字与大小：tools/pool/prompt_parts.py 记每段的角色名与字节数并粗估 token，不缓存 body、不落原文 —— magpie 那 10 份环形 body 缓存明文不搬（撞 tools/pool/gateway.py 的「不做定时器」纪律）。指针 tools/pool/route_log.py2. tokens_of 与真分词器有偏差：按字节数除以 4 的粗估，没有按模型分词器校准；校准那一半判 SKIP_NOT_APPLICABLE，本卡不引入模型侧依赖。指针 tools/pool/prompt_parts.py3. 规格判据 3 与判据 1 自相矛盾（一个要「无 system/tools ⇒ null」、一个说空段也占位）：实现以判据 1 为准，null 那条钉子改用空 body 钉。指针 复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md"
