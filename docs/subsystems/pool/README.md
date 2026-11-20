@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 53 个 py（52 个模块 + `__init__.py`）、**23710 行**（`wc -l tools/pool/*.py`，2026-11-21 现算）。
+`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24218 行**（`wc -l tools/pool/*.py`，2026-11-21 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -64,6 +64,7 @@
 | `rpm.toml` | 22 | 每分钟派活闸的数据：稳定 id → 每分最多几趟（0 = 关闸，越界报 `RpmError` 不静默当 0） | 无（被 `pool.rpm` 读） |
 | `search-vendors.toml` | 41 | 搜索 vendor 登记表（tavily / brave / serper / searxng）：base、key_env、key 是否必需、各家自己的「余额耗尽」状态码；**没有 rest 秒数**（数字只有 `pool_quota` 一份真源），也不含任何凭据明文 | 无（被 `pool.search` 读） |
 | `search.py` | 258 | 搜索 API 的 vendor 表 / key 串解析 / 拒绝 → 七值三件事（卡 A372 · F56）：轮换调 `route.rotate`（计数由调用方持有）、rest 调 `pool_quota.rest_after` 的搜索档、沉底调 `pool_sink`、打码调 `pool_accounts.mask_search_key` —— 本模块不含任何 rest 秒数与分类正则，也不自己算 key 身份 | 无（被搜索接入方调） |
+| `searcher.py` | 508 | searcher 的选择与让位：四值 why（gone / off / cant / nomodel）照 magpie `chosenSearcher`；`rank` 十行静态表、manual relay 只在被点名时可问；`turn` 一轮最多 3 个、同一个 provider 不重复问；`verdict` 把三种失败分开（搜了没找到 / 压根没搜 / 报错），`Sources:` 段只在 1 到 20 条时追加；`search` 点名的那个一个都不让位、其余按序让位；`off` 只关 provider 搜索、Search API 那条路照跑。不读盘、不读钟、不出网、不 print，外呼由注入的 `ask` 承担 | 无（纯函数，判据在 `tests/test_pool_searcher.py`；未接生产路径，接面是另一张卡） |
 | `sink.py` | 238 | 429 且「还有配额」的候选沉底到次序末尾（`sink` / `unsink` / `unsink_all` / `sunk_at`，进程内状态） | 无 |
 | `snapshot.py` | 104 | 零风险快照：`git stash create` 造 commit 再挂 `refs/snapshots/*`（完全不动工作区；不挂 ref 会被 gc） | 无（被 `pool.landing` 调） |
 | `speed.py` | 261 | 输出速度的判据（**不是怎么算速度，是什么情况不许报**）：窗口不可测 / 末端爆发 / 推理比答案快 `THINK_PACE` 倍 / Codex 太短，一律回 `(0, 0)` | 无（今天**零调用**：pool 不产 `ttft` / `first_text` / `flow`，接线只能接假数） |
@@ -92,8 +93,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **23710 行** / **53 个文件**（52 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 421 张（402 done / 19 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **24218 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 421 张（403 done / 18 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

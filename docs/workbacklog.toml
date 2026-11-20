@@ -6943,7 +6943,7 @@ depends = [
   "A383"
 ]
 risk = "mid"
-status = "pending"
+status = "done"
 
 [[cards]]
 id = "A386"

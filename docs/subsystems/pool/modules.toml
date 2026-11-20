@@ -314,3 +314,9 @@ cli = "无（被搜索接入方调）"
 name = "search-vendors.toml"
 duty = "搜索 vendor 登记表（tavily / brave / serper / searxng）：base、key_env、key 是否必需、各家自己的「余额耗尽」状态码；**没有 rest 秒数**（数字只有 `pool_quota` 一份真源），也不含任何凭据明文"
 cli = "无（被 `pool.search` 读）"
+
+[[module]]
+name = "searcher.py"
+duty = "searcher 的选择与让位：四值 why（gone / off / cant / nomodel）照 magpie `chosenSearcher`；`rank` 十行静态表、manual relay 只在被点名时可问；`turn` 一轮最多 3 个、同一个 provider 不重复问；`verdict` 把三种失败分开（搜了没找到 / 压根没搜 / 报错），`Sources:` 段只在 1 到 20 条时追加；`search` 点名的那个一个都不让位、其余按序让位；`off` 只关 provider 搜索、Search API 那条路照跑。不读盘、不读钟、不出网、不 print，外呼由注入的 `ask` 承担"
+cli = "无（纯函数，判据在 `tests/test_pool_searcher.py`；未接生产路径，接面是另一张卡）"
+

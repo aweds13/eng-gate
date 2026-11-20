@@ -12876,3 +12876,17 @@ evidence = [
   "file:复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md",
 ]
 gaps = "1. 分段账只留名字与大小：tools/pool/prompt_parts.py 记每段的角色名与字节数并粗估 token，不缓存 body、不落原文 —— magpie 那 10 份环形 body 缓存明文不搬（撞 tools/pool/gateway.py 的「不做定时器」纪律）。指针 tools/pool/route_log.py2. tokens_of 与真分词器有偏差：按字节数除以 4 的粗估，没有按模型分词器校准；校准那一半判 SKIP_NOT_APPLICABLE，本卡不引入模型侧依赖。指针 tools/pool/prompt_parts.py3. 规格判据 3 与判据 1 自相矛盾（一个要「无 system/tools ⇒ null」、一个说空段也占位）：实现以判据 1 为准，null 那条钉子改用空 body 钉。指针 复盘/卡/卡A380-F96Context页分段账-只留名字与大小不搬面板与读回原文.md"
+
+[entries."T-AG673"]
+id = "T-AG673"
+title = "F57searcher的选择与让位：三种失败要分开"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/searcher.py",
+  "file:tests/test_pool_searcher.py",
+  "test:test_pool_searcher.py::test_chosen_why_values_are_four_distinct",
+  "test:test_pool_searcher.py::test_turn_stops_at_three_in_rank_order",
+  "test:test_pool_searcher.py::test_turn_asks_each_provider_once",
+]
+gaps = "1. searcher 是**判据层**、没有接线：六个纯函数不读盘不读钟不出网，真正去问模型的那一句由调用方注入 —— 也就是说今天生产路径上仍没有 searcher，「搜了没找到 / 压根没搜 / 报错」这三件事在线上还分不开。指针 tools/pool/searcher.py2. `rank` 是照 magpie 抄的十行静态表，取值没有本仓的实测支撑（哪个 provider 更好用、谁在什么条件下该让位）—— 表是读数不是结论。指针 tools/pool/searcher.py3. 「同协议直通」意味着 searcher 只产出「这一轮问谁、问几个」，它不负责把答案拼进请求；拼装面刻意留空，避免造第二份协议翻译。指针 tools/pool/searcher.py"
