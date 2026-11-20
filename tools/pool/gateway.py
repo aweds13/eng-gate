@@ -70,10 +70,11 @@ if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
     from typing import Any
 
 __all__ = [
-    "ALLOWED_HOSTS", "Attempt", "BodyTooLarge", "CHUNK_BYTES", "ConfigError", "DEFAULT_HOST",
-    "DEFAULT_PORT", "DEFAULT_PROTOCOL", "KINDS", "MAX_BODY_BYTES", "Outcome", "Reply",
-    "ORIGINS_ENV", "REQUIRE_ORIGIN_ENV", "TOKEN_ENV", "bearer_ok", "build_server", "classify",
-    "check_host", "endpoint_protocol", "forward_http", "list_models", "main", "parse_retry_after",
+    "ALLOWED_HOSTS", "Attempt", "BARE_IDS_ENV", "BodyTooLarge", "CHUNK_BYTES",
+    "ConfigError", "DEFAULT_HOST", "DEFAULT_PORT", "DEFAULT_PROTOCOL", "KINDS",
+    "MAX_BODY_BYTES", "Outcome", "Reply", "ORIGINS_ENV", "REQUIRE_ORIGIN_ENV", "TOKEN_ENV",
+    "bare_ids_from_env", "bearer_ok", "build_server", "classify", "check_host",
+    "endpoint_protocol", "forward_http", "list_models", "main", "parse_retry_after",
     "pick_endpoint", "require_origin_from_env", "resolve_token", "route_once", "serve_http",
     "split_origins",
 ]
@@ -89,6 +90,8 @@ ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 TOKEN_ENV = "TF_POOL_GATEWAY_TOKEN"
 ORIGINS_ENV = "TF_POOL_GATEWAY_ORIGINS"
 REQUIRE_ORIGIN_ENV = "TF_POOL_GATEWAY_REQUIRE_ORIGIN"
+# ★ 卡 A386（F85）：裸 id 行 = 只发布读数。**默认关** —— 不设就是今天的行为（逐字节）。
+BARE_IDS_ENV = "TF_POOL_GATEWAY_BARE_IDS"
 #: 请求体上限：照 pool_mcp.MAX_LINE_BYTES（32 MiB）。
 MAX_BODY_BYTES = 32 << 20
 CHUNK_BYTES = 64 * 1024
@@ -881,13 +884,47 @@ def _models_note(base: str, unknown: int) -> str:
     return f"{base}；{tail}" if base else tail
 
 
-def list_models(*, root: Path | str | None = None) -> dict[str, Any]:
+def _bare_rows(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """裸 id 行 = 尾段唯一的那几条（其余照原样一条）。
+
+    ★ 卡 A386（F85）：只有**尾段唯一**才列 —— 两条 pa/x 与 pb/x 指向不同 entry，
+      列一条 x 就是替人猜「是哪一个」，所以不列，只把条数报成读数。
+      返回 (追加行, 因重名未列的**裸 id 条数**)；追加行除 id 外与被指向的那一条逐键相同。
+    """
+    tails: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        name = str(row.get("id") or "")
+        if "/" not in name:
+            continue
+        tails.setdefault(name.rsplit("/", 1)[1], []).append(row)
+    extra: list[dict[str, Any]] = []
+    skipped = 0
+    for tail in sorted(tails):
+        owners = tails[tail]
+        if len(owners) > 1:
+            skipped += 1   # 裸 id 的条数（不是被它挡住的原行条数）
+            continue
+        bare = dict(owners[0])
+        bare["id"] = tail
+        extra.append(bare)
+    return extra, skipped
+
+
+def list_models(*, root: Path | str | None = None,
+                bare_ids: bool | None = None) -> dict[str, Any]:
     """GET /v1/models 的数据：批准集（唯一权威）+ 快照状态 + 窗口读数。**不联网、不写快照。**
 
     ★ 卡 E143（F86 ①）：每条 data 带 context_window / max_output_tokens / limits_source。
       不知道就是 null + 按 UNKNOWN_MAX_OUTPUT（model_registry 那一处）发；
       **不许**填一个「看着合理」的数（128k / 200k / 1m）。
+
+    ★ 卡 A386（F85）：bare_ids=True 才在既有行**之后**追加一圈裸 id 行（只发布读数，
+      不接请求）。关着时输出与今天逐字节相同 —— 这是默认值，也是判据 1。
+      bare_ids=None（不传）⇒ 按 `BARE_IDS_ENV` 现算，与命令壳同一条判据
+      （`bare_ids_from_env` 那一处）；HTTP 面不信 env，只信服务建好时那一刻的读数。
     """
+    if bare_ids is None:   # 直调方（验收 ③）不经过命令壳 ⇒ 这里按同一处判据现算
+        bare_ids = bare_ids_from_env(os.environ.get(BARE_IDS_ENV))
     base = _base_root(root)
     pool_dir = pool_models.find_pool_dir(base)
     if pool_dir is None:
@@ -919,9 +956,13 @@ def list_models(*, root: Path | str | None = None) -> dict[str, Any]:
             "limits_source": ("registry" if (context_window is not None
                                              or max_output is not None) else "unknown"),
         })
+    note = _models_note(str(info.get("snapshot_note") or ""), unknown)
+    if bare_ids:
+        extra, skipped = _bare_rows(data)
+        data = [*data, *extra]
+        note = f"{note}；有 {skipped} 条裸 id 因重名未列"
     return {"object": "list", "data": data, "snapshot_at": info.get("snapshot_at"),
-            "snapshot_stale": bool(info.get("snapshot_stale")),
-            "note": _models_note(str(info.get("snapshot_note") or ""), unknown)}
+            "snapshot_stale": bool(info.get("snapshot_stale")), "note": note}
 
 
 # ------------------------------------------------- 真实转发（今天走不到：chat_urls 全空）
@@ -1021,6 +1062,14 @@ def split_origins(text: str | None) -> tuple[str, ...]:
 
 def require_origin_from_env(text: str | None) -> bool:
     """TF_POOL_GATEWAY_REQUIRE_ORIGIN=1 ⇒ 连**没带 Origin** 的请求也拒。"""
+    return (text or "").strip() == "1"
+
+
+def bare_ids_from_env(text: str | None) -> bool:
+    """TF_POOL_GATEWAY_BARE_IDS=1 ⇒ /v1/models 在批准集行之后追加裸 id 行。默认关。
+
+    **只有 "1" 是开**（""/0/true/yes/空白 一律关）—— 与 require_origin_from_env 同款。
+    """
     return (text or "").strip() == "1"
 
 
@@ -1200,7 +1249,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _get(self, path: str) -> None:
         if path == "/v1/models":
-            data = list_models(root=getattr(self.server, "root", None))
+            data = list_models(root=getattr(self.server, "root", None),
+                               bare_ids=bool(getattr(self.server, "bare_ids", False)))
             body = json.dumps(data, ensure_ascii=False).encode("utf-8")
             self._send(200, body, content_type="application/json; charset=utf-8")
             return
@@ -1260,7 +1310,8 @@ class _Server(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], *, forward: Forward = forward_http,
                  token: str, origins: Sequence[str] = (), require_origin: bool = False,
                  max_bytes: int = MAX_BODY_BYTES, pool: str = "codebuddy",
-                 routing: str = "order", root: Path | str | None = None, log: Any = None) -> None:
+                 routing: str = "order", root: Path | str | None = None,
+                 bare_ids: bool = False, log: Any = None) -> None:
         super().__init__(address, _Handler)
         self.forward = forward
         self.token = token
@@ -1269,6 +1320,7 @@ class _Server(ThreadingHTTPServer):
         self.pool = pool
         self.routing = routing
         self.root = root
+        self.bare_ids = bool(bare_ids)
         self.request_log = log
         # ★ 卡 A372（立卡人裁决 5）：rotate 的轮转计数**由服务端持有**，route_once 从这里取。
         #   不改 route_once 的调用面（既有两个调用点一个字不用动）；进程活着就一直在转，
@@ -1284,7 +1336,8 @@ def build_server(forward: Forward = forward_http, *, host: str = DEFAULT_HOST,
                  port: int = DEFAULT_PORT, token: str, origins: Sequence[str] = (),
                  require_origin: bool = False, max_bytes: int = MAX_BODY_BYTES,
                  pool: str = "codebuddy", routing: str = "order",
-                 root: Path | str | None = None, log: Any = None) -> _Server:
+                 root: Path | str | None = None, bare_ids: bool = False,
+                 log: Any = None) -> _Server:
     """建服务。**没有 token 就不建** —— 不为「无鉴权」留默认路径。"""
     if not token:
         raise ConfigError(
@@ -1303,18 +1356,19 @@ def build_server(forward: Forward = forward_http, *, host: str = DEFAULT_HOST,
         raise ConfigError(f"路由名起不来：{exc}") from None
     return _Server((check_host(host), int(port)), forward=forward, token=token,
                    origins=origins, require_origin=require_origin, max_bytes=int(max_bytes),
-                   pool=pool, routing=routing, root=root, log=log)
+                   pool=pool, routing=routing, root=root, bare_ids=bare_ids, log=log)
 
 
 def serve_http(forward: Forward = forward_http, *, host: str = DEFAULT_HOST,
                port: int = DEFAULT_PORT, token: str, origins: Sequence[str] = (),
                require_origin: bool = False, max_bytes: int = MAX_BODY_BYTES,
                pool: str = "codebuddy", routing: str = "order",
-               root: Path | str | None = None, log: Any = None) -> int:
+               root: Path | str | None = None, bare_ids: bool = False,
+               log: Any = None) -> int:
     """起服务并阻塞。**默认关**：只有显式调用（main）才会监听，import 不动任何端口。"""
     server = build_server(forward, host=host, port=port, token=token, origins=origins,
                           require_origin=require_origin, max_bytes=max_bytes, pool=pool,
-                          routing=routing, root=root, log=log)
+                          routing=routing, root=root, bare_ids=bare_ids, log=log)
     bound = int(server.server_address[1])
     if log is not None:
         log(f"[pool-gateway] 监听 http://{check_host(host)}:{bound}/（只绑回环；Bearer 鉴权；"
@@ -1345,6 +1399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     token = os.environ.get(TOKEN_ENV, "").strip()
     origins = tuple(args.origin) + split_origins(os.environ.get(ORIGINS_ENV))
     require_origin = require_origin_from_env(os.environ.get(REQUIRE_ORIGIN_ENV))
+    bare_ids = bare_ids_from_env(os.environ.get(BARE_IDS_ENV))
     try:
         # ★ 卡 E103：先归一、再起服务 —— 不认识的名字在这里就退 2，**一个端口都不绑**。
         routing = pool_route.parse_routing(args.routing)
@@ -1354,6 +1409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return serve_http(host=args.host, port=args.port, token=token, origins=origins,
                           require_origin=require_origin, pool=args.pool, routing=routing,
+                          bare_ids=bare_ids,
                           log=lambda line: print(line, file=sys.stderr, flush=True))
     except ConfigError as exc:
         print(f"[pool-gateway] 起不来：{exc}", file=sys.stderr, flush=True)

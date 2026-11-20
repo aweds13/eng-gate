@@ -27,6 +27,7 @@ r"""号池网关（`tools/pool/gateway.py`，卡 E94 · T-AG603）的测试 —�
 | `test_streaming_is_forwarded_byte_for_byte` | SSE 逐字节转发、不解析、不改写 |
 | `test_chat_path_never_uses_messages_endpoint` | 只做同协议直通 |
 | `test_f36_*`（六条） | F36：集合恰三值、路径恰四键、Host 与转发头不改答复、`null` 仍 403 |
+| `test_bare_ids_*`（六条） | F85：裸 id 行默认关、只认 `1`、追加行、撞名不列、裸名 404 |
 
 ★ 全部用桩：`forward` 是注入的，`ledger` / `endpoints` / `rpm_limits` / `stamps` 都是参数，
   号池目录造在 `tmp_path` 里 —— **一个字节都不出网**，也不往真的 `gates/diag/` 写。
@@ -629,10 +630,12 @@ def start_server(env: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     started: list[tuple[gateway._Server, threading.Thread]] = []
 
     def _start(forward: Any, *, token: str = TOKEN, origins: tuple[str, ...] = (),
-               require_origin: bool = False, max_bytes: int = 4096) -> int:
+               require_origin: bool = False, max_bytes: int = 4096,
+               bare_ids: bool = False) -> int:
         server = gateway.build_server(forward, host="127.0.0.1", port=0, token=token,
                                       origins=origins, require_origin=require_origin,
-                                      max_bytes=max_bytes, pool="codebuddy", root=env)
+                                      max_bytes=max_bytes, pool="codebuddy", root=env,
+                                      bare_ids=bare_ids)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         started.append((server, thread))
@@ -1385,3 +1388,173 @@ def test_chat_protocol_still_switches_on_the_same_500(env: Path) -> None:
     assert len(out.attempts) == 2, out.attempts
     assert len(forward.calls) == 2
     assert out.stop_reason == ""
+# ========================================== 卡 A386（F85）：裸 id 行是**默认关**的开关
+#
+# 「裸 id 行」= 在批准集那几行**之后**追加一圈只带尾段 id 的行（比如 huaweicloud-maas/GLM-5.2
+# 之后再发一条 id="GLM-5.2"）。**只发布读数，不接请求**：POST 带裸名仍然 404。
+# 默认关 ⇒ 不设 TF_POOL_GATEWAY_BARE_IDS 时 /v1/models 逐字节与今天相同。
+
+
+def _models_baseline() -> dict[str, Any]:
+    """今天（不设开关）`/v1/models` 的逐字答复 —— 判据 1 的比对对象。
+
+    ★ 这是**冻结的读数**，不是从实现里算出来的：开关关着时必须逐字节等于它。
+      要改它先改卡 —— 它挡的是「顺手加个字段/换个键序」。
+    """
+    return {
+        "object": "list",
+        "data": [{
+            "id": MODEL,
+            "object": "model",
+            "owned_by": "pool",
+            "context_window": None,
+            "max_output_tokens": pool_model_registry.UNKNOWN_MAX_OUTPUT,
+            "limits_source": "unknown",
+        }],
+        "snapshot_at": "",
+        "snapshot_stale": False,
+        "note": (
+            "有 1 条模型的窗口未知（context_window = null，"
+            f"回复上限按 {pool_model_registry.UNKNOWN_MAX_OUTPUT} 发）"
+        ),
+    }
+
+
+def test_bare_ids_switch_defaults_off() -> None:
+    """★ 判据 2：开关**只认 `1`** —— ""/0/false/true/yes/on/空白 全关。
+
+    ★ 关的那半边同样是判据：写成 `if text:` 或 `text != "0"` 都会让最常见的
+      误设值 `TF_POOL_GATEWAY_BARE_IDS=0` 变成「开」。
+    """
+    for off in ("", "  ", "0", " 0 ", "false", "FALSE", "true", "yes", "on", "2", "10", "01", "-1"):
+        assert gateway.bare_ids_from_env(off) is False, repr(off)
+    assert gateway.bare_ids_from_env(None) is False
+    for on in ("1", " 1 ", "1" + chr(9), "1" + chr(10)):
+        assert gateway.bare_ids_from_env(on) is True, repr(on)
+
+
+def test_bare_ids_env_name_is_declared_once_and_read_once() -> None:
+    """★ 判据 2：`TF_POOL_GATEWAY_BARE_IDS` 在源码里**恰两处** —— 一处定义、一处读取。
+
+    ★ 数的是字面量：多一处就是长了第二份真源（改名时会漂成两个名字）。
+    """
+    source, _ = _gateway_source()
+    hits = source.count("TF_POOL_GATEWAY_BARE_IDS")
+    assert hits == 2, f"TF_POOL_GATEWAY_BARE_IDS 出现 {hits} 处（定义一处 + 读取一处）"
+    assert gateway.BARE_IDS_ENV == "TF_POOL_GATEWAY_BARE_IDS"
+
+
+def test_bare_ids_off_is_byte_for_byte_today(
+        env: Path, start_server: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 1：不设开关（以及显式设成 `0`）时答复**逐字节**等于今天的读数。"""
+    monkeypatch.delenv(gateway.BARE_IDS_ENV, raising=False)
+    out = gateway.list_models(root=env)
+    assert json.dumps(out, ensure_ascii=False) == json.dumps(_models_baseline(), ensure_ascii=False)
+    assert [item["id"] for item in out["data"]] == [MODEL], "默认关却多了/少了行"
+
+    monkeypatch.setenv(gateway.BARE_IDS_ENV, "0")
+    assert gateway.list_models(root=env) == out, "设成 0 就是关，答复不许变"
+
+    port = start_server(_Stub(_ok()))
+    status, _, body = _request(port, "GET", "/v1/models")
+    assert status == 200
+    assert body == json.dumps(out, ensure_ascii=False).encode("utf-8"), "线上字节必须与直调一致"
+
+
+def test_main_passes_bare_ids_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """命令壳是开关的**唯一**读取点：env 只认 `1`，其余一律把 False 交下去。"""
+    monkeypatch.setenv(gateway.TOKEN_ENV, TOKEN)
+    seen: dict[str, Any] = {}
+
+    def _capture(**kwargs: Any) -> int:
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(gateway, "serve_http", _capture)
+    monkeypatch.delenv(gateway.BARE_IDS_ENV, raising=False)
+    assert gateway.main([]) == 0
+    assert seen["bare_ids"] is False, "没设 env 却把开关打开了"
+    monkeypatch.setenv(gateway.BARE_IDS_ENV, "0")
+    assert gateway.main([]) == 0
+    assert seen["bare_ids"] is False
+    monkeypatch.setenv(gateway.BARE_IDS_ENV, "1")
+    assert gateway.main([]) == 0
+    assert seen["bare_ids"] is True
+
+
+def test_bare_ids_on_appends_rows_after_the_approved_ones(
+        env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        start_server: Any) -> None:
+    """★ 判据 3：打开后**既有行先原样**，裸 id 行**后追加**，且除 `id` 外逐键相同。
+
+    ★ 走**真服务 + 真 `GET /v1/models`**：直调函数绿不代表线上字节绿。
+    """
+    _point_registry(tmp_path, monkeypatch,
+                    _one_model(MODEL, extra="context_window = 1000000" + chr(10) +
+                               "max_output = 32000" + chr(10)))
+    monkeypatch.delenv(gateway.BARE_IDS_ENV, raising=False)
+    off = gateway.list_models(root=env)
+    on = gateway.list_models(root=env, bare_ids=True)
+
+    n = len(off["data"])
+    assert [item["id"] for item in on["data"]][:n] == [item["id"] for item in off["data"]], \
+        "打开开关改动了既有行"
+    assert on["data"][:n] == off["data"], "既有行必须原样（不只是 id）"
+    appended = on["data"][n:]
+    assert appended, "开关打开却一条裸 id 都没追加"
+    for row in appended:
+        assert "/" not in row["id"], row
+        owner = next(item for item in off["data"] if item["id"].rsplit("/", 1)[1] == row["id"])
+        assert {k: v for k, v in row.items() if k != "id"} == \
+            {k: v for k, v in owner.items() if k != "id"}, "裸 id 行与被指向的原行不一致"
+    assert "有 0 条裸 id 因重名未列" in on["note"], on["note"]
+    assert "条裸 id 因重名未列" not in off["note"], "关着时 note 不许提裸 id"
+
+    stub = _Stub(_ok())
+    port = start_server(stub, bare_ids=True)
+    status, _, body = _request(port, "GET", "/v1/models")
+    assert status == 200
+    assert body == json.dumps(on, ensure_ascii=False).encode("utf-8"), "线上字节与直调不一致"
+    assert stub.calls == []
+
+
+def test_bare_ids_collision_is_counted_not_listed(
+        env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """★ 判据 4：两条 pa/x 与 pb/x 尾段撞名 ⇒ 裸 id `x` **不列**，note 报条数。
+
+    ★ 列一条 `x` 就是替调用方猜「是 pa 的还是 pb 的」—— 本仓没有 provider 目录，
+      猜不了，就只报读数。
+    """
+    _pool_dir(env, approved=("pa/x", "pb/x"))
+    monkeypatch.delenv(gateway.BARE_IDS_ENV, raising=False)
+    out = gateway.list_models(root=env, bare_ids=True)
+    assert [item["id"] for item in out["data"]] == ["pa/x", "pb/x"], "既有行不许被动"
+    assert "有 1 条裸 id 因重名未列" in out["note"], out["note"]
+    assert "x" not in [item["id"] for item in out["data"]], "撞名的裸 id 不许列"
+    assert "有 1 条裸 id 因重名未列" not in gateway.list_models(root=env)["note"], "关着时不许说"
+
+
+def test_bare_ids_are_listed_but_not_routed(
+        env: Path, start_server: Any) -> None:
+    """★ 判据 5：开关打开后，POST 带**裸名**仍然 404 + 点名「不在批准集里」。
+
+    ★ 发布读数和放行请求是两件事：`/v1/models` 里出现 `GLM-5.2` 之后，
+      谁要是顺手让请求侧也认它，批准集就不再是唯一权威了。
+    """
+    bare = MODEL.rsplit("/", 1)[1]
+    forward = _Forward(_ok())
+    outcome = _run(env, forward, model=bare)
+    assert outcome.status == 404, outcome.status
+    assert "不在批准集里" in outcome.body.decode("utf-8")
+    assert forward.calls == []
+
+    stub = _Stub(_ok())
+    port = start_server(stub, bare_ids=True)
+    status, _, body = _request(
+        port, "POST", "/v1/chat/completions",
+        body={"model": bare, "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert status == 404, status
+    assert "不在批准集里" in body.decode("utf-8")
+    assert stub.calls == [], "裸名被放行了：发布读数不等于接请求"
+

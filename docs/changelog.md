@@ -36,6 +36,11 @@
 - 判据：magpie 的 seats.json / planSeatKey / AccountNames 这一族在本仓没有宿主 —— pool 的「座位」是账本稳定 id（E94 起就这样），不是 magpie 可合并的座位对象；账号去重按 id 而不是 label。产品码零改动。
 - 新增 tests/test_pool_no_seat_merge.py（244 行 / 5 钉）：seat 族词表在 tools/ src/ scripts/ 零命中、PATHS 恰好四键、账本没有 window 段、账本按 id 去重、cleared.py 里「别名归并不移植」的锚句还在。
 - 账本不存在时判据 3 走 skip（不 fail），仓外路径由 TF_ACCOUNTS_TOML 指，不写死。
+## 2026-11-20 T-AG674 F85 裸模型 id 列进 /v1/models 的开关
+- `tools/pool/gateway.py` 新增 `BARE_IDS_ENV = "TF_POOL_GATEWAY_BARE_IDS"`、`bare_ids_from_env()`、`_bare_rows()`，`list_models(..., bare_ids: bool | None = None)`：传 True 才在批准集行之后追加裸 id 行（除 id 外与被指向那条逐键相同），重名只计数不列。
+- 默认关，**关着时输出逐字节不变**（判据 1 由 `test_bare_ids_off_is_byte_for_byte_today` 钉住）；HTTP 面只信服务建好时那一刻的 env 读数，不信请求里的任何东西。
+- `tests/test_pool_gateway.py` 加 7 条钉子（默认关 / env 名只声明一次只读一次 / 关着逐字节不变 / main 真的把 env 传下去 / 开着追加在批准集之后 / 重名计数 / 裸 id 不接请求）。
+- `docs/subsystems/pool/模型与号池.md` 续写 §8（开关名 + 只发布读数不接请求 + 重名不列规则），`docs/subsystems/pool/modules.toml` 的 gateway 条 cli 段补 env 名。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

@@ -1,0 +1,14 @@
+[entries."T-AG674"]
+id = "T-AG674"
+title = "F85裸模型id列进v1-models的开关：默认关、关着逐字节不变"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "test:test_pool_gateway.py::test_bare_ids_off_is_byte_for_byte_today",
+  "test:test_pool_gateway.py::test_bare_ids_on_appends_rows_after_the_approved_ones",
+  "test:test_pool_gateway.py::test_bare_ids_are_listed_but_not_routed",
+]
+gaps = "1. 裸 id 只发布、不接请求：`bare_ids=True` 时 `/v1/models` 会多出尾段唯一的裸 id 行，但请求侧仍按 `provider/model` 认 —— 客户端若拿裸 id 直接发请求，走的还是后端既有的裸名解析，**不是**这一圈新行。指针 tools/pool/gateway.py2. 重名不列只报数：两条 `pa/x` 与 `pb/x` 指向不同 entry 时裸 id `x` 一条都不追加，只在 note 里写「有 N 条裸 id 因重名未列」—— 这个 N 今天没有任何读者，是留给人看的读数。指针 tools/pool/gateway.py3. `GET /v1/models/{id}` 仍按完整 id 认，裸 id 认不出就是 404；「按裸 id 认单个模型」与「请求侧按裸名路由」是明写的决定（不做），不是欠账。指针 docs/subsystems/pool/模型与号池.md"
+
