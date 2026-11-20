@@ -7114,3 +7114,21 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E148"
+task = "T-AG681"
+title = "宿主机绑定判据改成位址规则（GHA上唯一红门）"
+tree = ".wt/E148"
+spec = "复盘/卡/卡E148-宿主机绑定判据改成位址规则.md"
+files = [
+  "tests/test_pool_limits_data.py",
+  "复盘/卡/卡A367-F33限额数据面-limits.toml落地前先裁决同一个文件两个形状.md",
+  "docs/changelog.d/T-AG681.md",
+  "docs/traceability.d/T-AG681.toml"
+]
+depends = [
+  "E146"
+]
+risk = "mid"
+status = "pending"
