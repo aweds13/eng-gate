@@ -7029,3 +7029,68 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A389"
+task = "T-AG677"
+title = "F90凭据被拒502并归因：只钉既有行为加归因"
+tree = ".wt/A389"
+spec = "复盘/卡/卡A389-F90凭据被拒502并归因-只钉既有行为加归因.md"
+files = [
+  "tools/pool/gateway.py",
+  "tests/test_pool_gateway.py",
+  "复盘/卡/卡A389-F90凭据被拒502并归因-只钉既有行为加归因.md",
+  "docs/changelog.d/T-AG677.md"
+]
+depends = [
+  "A373",
+  "A375",
+  "A380",
+  "A383",
+  "A384",
+  "A386"
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A390"
+task = "T-AG678"
+title = "F17七种路由策略接线现状：证据钉子与缺席判词"
+tree = ".wt/A390"
+spec = "复盘/卡/卡A390-F17七种路由策略接线现状-证据钉子与缺席判词.md"
+files = [
+  "tests/test_pool_route_wiring.py",
+  "docs/decisions/0012-route-strategies-wiring.md",
+  "复盘/卡/卡A390-F17七种路由策略接线现状-证据钉子与缺席判词.md",
+  "docs/changelog.d/T-AG678.md"
+]
+depends = []
+risk = "low"
+status = "pending"
+
+[[cards]]
+id = "A391"
+task = "T-AG679"
+title = "F7请求体边界415与零解压"
+tree = ".wt/A391"
+spec = "复盘/卡/卡A391-F7请求体边界415与零解压.md"
+files = [
+  "tools/pool/gateway.py",
+  "tests/test_pool_gateway.py",
+  "docs/subsystems/pool/README.md",
+  "复盘/卡/卡A391-F7请求体边界415与零解压.md",
+  "docs/changelog.d/T-AG679.md"
+]
+depends = [
+  "A373",
+  "A375",
+  "A380",
+  "A381",
+  "A383",
+  "A384",
+  "A386",
+  "A389"
+]
+risk = "mid"
+status = "pending"
