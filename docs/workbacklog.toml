@@ -7094,3 +7094,23 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E146"
+task = "T-AG680"
+title = "GHA云门禁第二仓：构建器按仓取profile（骨架+每仓一份）+ OpenMAIC真vitest读数"
+tree = ".wt/E146"
+spec = "复盘/卡/卡E146-GHA云门禁第二仓：构建器按仓取profile.md"
+files = [
+  "scripts/cloud/gha/gate_profile.py",
+  "scripts/cloud/gha/profiles/engineering.toml",
+  "scripts/cloud/gha/profiles/openmaic.toml",
+  "scripts/cloud/gha/build_snapshot.py",
+  "tests/test_gha_cloud_gate.py",
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md"
+]
+depends = [
+  "E145"
+]
+risk = "mid"
+status = "pending"
