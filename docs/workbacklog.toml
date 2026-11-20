@@ -6896,3 +6896,51 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A383"
+task = "T-AG671"
+title = "F95隐藏模型：列出来的必须能用（/v1/models 今天不问禁用表）"
+tree = ".wt/A383"
+spec = "复盘/卡/卡A383-F95隐藏模型-列出来的必须能用.md"
+files = [
+  "tools/pool/gateway.py",
+  "tests/test_pool_gateway.py",
+  "tests/test_pool_disabled_wiring.py",
+  "tests/test_pool_hidden_scope.py",
+  "docs/subsystems/pool/模型与号池.md",
+  "docs/subsystems/pool/事后判据清单.md",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A383-F95隐藏模型-列出来的必须能用.md",
+  "docs/changelog.d/T-AG671.md"
+]
+depends = [
+  "A372",
+  "A373",
+  "A375",
+  "A380",
+  "A381",
+  "A384"
+]
+risk = "mid"
+status = "pending"
+
+[[cards]]
+id = "A385"
+task = "T-AG673"
+title = "F57 searcher的选择与让位：三种失败要分开"
+tree = ".wt/A385"
+spec = "复盘/卡/卡A385-F57-searcher选择与让位-三种失败要分开.md"
+files = [
+  "tools/pool/searcher.py",
+  "tests/test_pool_searcher.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A385-F57-searcher选择与让位-三种失败要分开.md"
+]
+depends = [
+  "A372",
+  "A380",
+  "A383"
+]
+risk = "mid"
+status = "pending"
