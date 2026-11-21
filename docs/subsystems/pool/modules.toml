@@ -244,7 +244,7 @@ cli = "本文件即入口；`wb_watch.py`"
 
 [[module]]
 name = "usage_ingest.py"
-duty = "外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账）"
+duty = "外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额（不经过派活器的调用也要进账）；读数面经 `reported_summary()` 单独列出上报量（不进限额判据，卡 A392）"
 cli = "无"
 
 [[module]]

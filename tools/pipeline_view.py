@@ -59,7 +59,7 @@ import re
 import subprocess
 import time
 import tracemalloc
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -83,6 +83,14 @@ try:
     from pool import holds_wiring as _holds_wiring
 except ImportError:  # pragma: no cover - 工具目录不在 sys.path 的调用方
     _holds_wiring = None
+
+#: ★ 卡 A392（T-AG683）：上报账的读数**只在这里**调（`usage_ingest.reported_summary`）。
+#:   ★ **不许**把这个 import 搬到 `tools/pool/holds_wiring.py` —— 它在派活留痕行上被调用，
+#:   上报数字从那里流出去就等于进了派活链。包不在 sys.path 时如实说「不知道」（0 / None）。
+try:
+    from pool import usage_ingest as _usage_ingest
+except ImportError:  # pragma: no cover - 工具目录不在 sys.path 的调用方
+    _usage_ingest = None
 
 ROOT = Path(__file__).resolve().parent.parent
 #: 这一次读数用的根（`--report` 的 git rev-list 要在这儿跑；`--json` 不受影响）。
@@ -169,8 +177,11 @@ BLOCKS: tuple[dict, ...] = (
      "fields": ("holds",),
      # ★ 卡 A369：why 是判据层的**原串**（"-" / "low" / "log" / "none" / "credits" /
      #   ""），why_text 是人话 —— 两个都要在，否则「估不出来」变成沉默。
+     # ★ 卡 A392：reported_tokens / reported_priced 是**另加**的两列（上报账单列）——
+     #   tokens / cost / priced 三列的语义一个字不动（tokens 仍不含上报）。
      "row_fields": ("account", "platform", "model", "used_percent", "why",
-                    "why_text", "tokens", "cost", "priced", "since")},
+                    "why_text", "tokens", "cost", "priced", "since",
+                    "reported_tokens", "reported_priced")},
 )
 
 _SRC: dict[str, dict] = {b["id"]: b for b in BLOCKS}
@@ -756,6 +767,45 @@ def _status_dirty(out: str) -> bool:
 # ================================================================ 7. holds
 
 
+def _reported_columns(row: dict, root: Path) -> dict:
+    """这一窗里**上报账**另有多少 token、有没有价（卡 A392）。
+
+    * `reported_tokens`：窗口起点（行里的 `since`）到**此刻**之间、同模型的上报 token 和；
+    * `reported_priced`：`True` 全有价 / `False` 至少一行没价 / `None` 这一窗没有上报行。
+
+    ★ **为什么只到「此刻」而不是窗口终点**：行里只有 `since`（窗口起点），没有终点；
+      上报行是已经发生的事，`[since, now)` 就是这一窗到今天为止的那一段。窗口终点在
+      将来时多算的部分不存在（还没发生）。
+    ★ **为什么没有窗口就是 0 / None**：`since` 为空（`why="-"` 那一档，窗口都判不出来）
+      ⇒ 这一行没有可归属的窗口，不拿「整本上报账」冒充这一窗。
+    ★ 理由（判据 3 要求写进代码注释）：上报账**按账号归不了**（没有 `account` 字段），
+      价又是可选的 ⇒ 它不能进限额的 spent / unpriced。能做的是「让读的人看见这里
+      有个下界没算进来」，而不是把它折成 0。
+    ★ 缺失 / 坏掉 / 调不通 ⇒ `0 / None`，**不抛**（读数面缺什么说什么，不许带崩）。
+    """
+    blank = {"reported_tokens": 0, "reported_priced": None}
+    if _usage_ingest is None:  # pragma: no cover - 工具目录不在 sys.path 的调用方
+        return blank
+    model = str(row.get("model") or "").strip()
+    since = row.get("since")
+    if not model or not isinstance(since, str) or not since.strip():
+        return blank
+    try:
+        start = datetime.fromisoformat(since)
+    except ValueError:
+        return blank
+    if start.tzinfo is None:  # 没有偏移量就没法与 aware 的 end 比 —— 不猜
+        return blank
+    end = datetime.now(timezone.utc)
+    if end <= start:
+        return blank
+    try:
+        tokens, priced = _usage_ingest.reported_summary(model, start, end, root=root)
+    except Exception:  # 读数面不许被上报账带崩（缺什么说什么）
+        return blank
+    return {"reported_tokens": int(tokens), "reported_priced": priced}
+
+
 def read_holds(root: Path) -> dict:
     """整窗用量估算（口径见 ``BLOCKS["holds"]``）。静态块，**不走读数缓存**。
 
@@ -764,6 +814,8 @@ def read_holds(root: Path) -> dict:
       调它、把三种结局分开说（账本读不到 / 一个号都没有 / 账本坏了）、保证**不抛**。
     ★ 坏账本（used_percent 越界 / 重复 id / TOML 坏）**不是**「没有读数」：读数面
       仍要出得来（`--json` / `--report` 不许抛），但必须点出原文 —— 不许静默成 null。
+    ★ 卡 A392：每行追加 `reported_tokens` / `reported_priced` 两列（见 `_reported_columns`）。
+      上报账的调用**只在这里**；`holds_wiring` 一个字不改。
     """
     spec = _SRC["holds"]
     if _holds_wiring is None:  # pragma: no cover - 工具目录不在 sys.path 的调用方
@@ -777,7 +829,8 @@ def read_holds(root: Path) -> dict:
     if reading.rows is None:
         return {"holds": None, "holds_note": reading.note or spec["missing_note"],
                 "holds_source": spec["source"]}
-    result: dict = {"holds": reading.rows, "holds_source": spec["source"]}
+    rows = [dict(row, **_reported_columns(row, root)) for row in reading.rows]
+    result: dict = {"holds": rows, "holds_source": spec["source"]}
     if reading.note:
         result["holds_note"] = reading.note
     return result
@@ -962,6 +1015,17 @@ def _report_worktrees(lines: list[str], r: dict) -> None:
         lines.append(f"  ★ {note}")
 
 
+def _reported_text(h: dict) -> str:
+    """人话里怎么说「上报账这一窗另有多少」—— 没价就明说没价（卡 A392）。"""
+    tokens = h.get("reported_tokens", 0)
+    priced = h.get("reported_priced")
+    if priced is None:
+        return "上报=0（这一窗没有上报行）"
+    if priced:
+        return f"上报={tokens}（都有价）"
+    return f"上报={tokens}（★ 其中有行没价，这笔钱不知道）"
+
+
 def _report_holds(lines: list[str], r: dict) -> None:
     """第七块：整窗用量估算 —— **估不出来也要把理由念出来**（卡 A369 的核心）。"""
     holds = r.get("holds")
@@ -977,7 +1041,7 @@ def _report_holds(lines: list[str], r: dict) -> None:
         lines.append(f"  · {h['account']}（{h['platform']}）"
                      f"model={h['model'] or '(没有批准模型)'}  used={h['used_percent']}"
                      f"  why={why}  tokens={h['tokens']}  cost={h['cost']}"
-                     f"  priced={h['priced']}")
+                     f"  priced={h['priced']}  {_reported_text(h)}")
         if h.get("why_text"):
             lines.append(f"    ★ {h['why_text']}")
     note = r.get("holds_note")

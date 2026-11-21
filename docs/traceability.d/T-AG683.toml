@@ -1,0 +1,18 @@
+[entries."T-AG683"]
+id = "T-AG683"
+title = "F43读端接线：上报量进只读读数面，派活链零 import"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/model_registry.py",
+  "file:tools/pool/usage_ingest.py",
+  "file:tools/pipeline_view.py",
+  "file:tests/test_f43_read_face.py",
+  "test:test_pool_usage_ingest.py::test_merged_tokens_counts_every_alias_of_the_same_model",
+  "test:test_pool_usage_ingest.py::test_reported_summary_is_stable_after_double_ingest",
+  "test:test_pipeline_view_holds.py::test_holds_row_flags_unpriced_reported_rows",
+  "test:test_pipeline_view_holds.py::test_missing_reported_ledger_is_zero_not_a_crash",
+  "test:test_f43_read_face.py::test_read_face_stays_off_the_dispatch_path",
+]
+gaps = "- 读端消费者只有 `tools/pipeline_view.py` 的 holds 块（经 `usage_ingest.reported_summary()`）；`merged_tokens(include_reported=True)` 至今没有、将来也不许有派活链消费者。指针 `tools/pool/usage_ingest.py`。- 生产窗口键今天对不上：账本写 `resets_at` / `span_s`（卡 A370），`holds_wiring.window_from_account()` 读 `reset_at` / `span_days` ⇒ 真账本 holds 行 `since` 恒 None，两列在真机恒 0 / None。本卡不许改薄层，如实记。指针 `tools/pool/holds_wiring.py`。- 上报行按账号归属仍无判据（`FIELDS` 没有 `account`，落盘前剥掉五个身份栏）；本卡只按模型 + 窗口出数。指针 `tools/pool/usage_ingest.py`。- 卡规格里「pipeline_view 的 module 条目同步提两列」那半条无落点：`modules.toml` 只登记 `tools/pool/` 的模块，没有 pipeline_view 条目 ⇒ 未做。指针 `docs/subsystems/pool/modules.toml`。- `tools/wb_daily.py` 一行注释仍写「六块读数」（不在本卡域）；它读整份 --json、不按块清单过滤 ⇒ 行为不受影响。指针 `tools/wb_daily.py`。"
+

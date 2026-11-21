@@ -39,6 +39,12 @@
 - 新增 §9：五个镜像仓各跑什么、最新读数、以及「run 结论永远是 failure 但门禁作业是绿的」这条读法；§7 补第 6 条 workflow scope 实测（contents API 对两仓都 404）。
 - 号池桩缺 `projects.toml` 不再抛裸 `FileNotFoundError`：`gate_profile.py` 的 `_cross_check` 拒收这类 profile（退 2 `PROFILE_INVALID`）、`profiles/engineering.toml` 的 `need` 补齐五件、`build_snapshot.py` 的 rewrite 段抽成 `_rewrite_projects_root()` 并在读前判存在（缺 ⇒ `POOL_STUB_INCOMPLETE` 退 6）。
 - 钉子三条进 `tests/test_gha_cloud_gate.py`（缺件 profile 加载即拒 / 目录里每份 profile 都过这条 / 缺件退 6 而不是 traceback），该文件 29 passed。
+## 2026-11-21 T-AG683 F43 读端接线：上报量进只读读数面，派活链零 import
+- `tools/pool/model_registry.py` 新增别名归一的**唯一实现**（`build_alias_table` / `aliases_from` / `matches_from` / `model_aliases` / `matches_model` + 只读盘一次的缓存）；`tools/wb_dispatch.py` 的 `model_aliases()` / `_matches_model()` 降成薄委托（签名、返回值与「注册表读不到 ⇒ 字面相等」逐字不变）。
+- `tools/pool/usage_ingest.py` 的 `_dispatch_tokens()` 与上报扫描改走同一份别名实现；新增公开 `reported_summary(model, start, end, *, root=None) -> (tokens, priced)`；`merged_tokens()` 的 `include_reported` 默认值仍是 `False`，「不许被限额判据调用」那句原样保留。
+- `tools/pipeline_view.py` 的 holds 行追加 `reported_tokens` / `reported_priced` 两列（窗口起点到现在；上报账缺失或坏 ⇒ 0 / None，不抛），`BLOCKS` 的 `row_fields` 同步；tokens / cost / priced 三列语义一个字不动。
+- `tools/pool_mcp.py` 的 `WORKBENCH_SECTIONS` 与 `tools/dsh_panel.py` 的 `SECTIONS` 加 `holds`（块序照 pipeline_view，放最后），「六块」文案随之改「七块」；钉子 `tests/test_f43_read_face.py` 用 `ast` 扫四个派活侧文件（`wb_dispatch` / `pool/limits_check` / `pool/holds_wiring` / `pool/pricing`），零 import / 零调用 `usage_ingest` / `merged_tokens` / `reported_summary`。
+- 边界：`tools/pool/holds_wiring.py` 一个字没改；上报行按账号归不了、价可缺 ⇒ 不许并进限额的 spent / unpriced（长期约束，不是待办）。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

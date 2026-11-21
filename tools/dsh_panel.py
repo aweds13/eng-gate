@@ -123,8 +123,8 @@ DSH_PEER_RANGE = ">=0.2.0-rc"
 #: ★ 本仓卡树多，真读数实测 ~14s；留 30s 余量。
 BOARD_TIMEOUT_SECONDS = 30
 
-#: 六块读数的名字（与 pipeline_view 的顶层键一致）。
-SECTIONS = ("cards", "gates", "verdicts", "leases", "fences", "worktrees")
+#: 七块读数的名字（与 pipeline_view 的顶层键一致；卡 A392 加 holds）。
+SECTIONS = ("cards", "gates", "verdicts", "leases", "fences", "worktrees", "holds")
 
 #: 唯一的那条只读缝的前缀（同源路由都在它下面）。
 SEAM_PREFIX = "/dsh-panel"
@@ -1601,7 +1601,7 @@ _CLIENT_JS_TEMPLATE = r"""/* 卡 221/240/242/244/247 产物 · 全局面板：�
  * root 作用域 `main` keyed 座的一个 key，并在 `sidebar.panellist` 各挂一行 ⇒ 不切窗口就能看板。
  * 卡 247：右栏三个**常驻页签**（id 带包名前缀 + keepMounted）+ 左栏底部入口（保底路）。
  * 卡 242：三行是**快捷入口** —— 默认开**真实页面**（ctx.sidebarRight.openTab("browser",
- * { params: { url } })，依据见 QuickEntry 上方注释）；原来的自绘视图（六块/甘特/列表）
+ * { params: { url } })，依据见 QuickEntry 上方注释）；原来的自绘视图（七块/甘特/列表）
  * **保留**成可选的「内嵌读数」分支。★ 只读：不写仓库、不起工人；点选只写「选中态」。
  * ★ 加载失败 / 数据源缺失要看得见（data-wb-state="error"），绝不静默白屏；
  * 某块缺 ⇒ data-wb-state="missing"；目标页连不上 ⇒ 显式「没起 + 怎么起」。 */
@@ -1614,7 +1614,7 @@ window.__ModuleLoader__.load({
     const h = react.createElement;
     const NS = "workbenchPanel";
     const PANEL_ID = "workbench_board";
-    const SECTIONS = ["cards", "gates", "verdicts", "leases", "fences", "worktrees"];
+    const SECTIONS = ["cards", "gates", "verdicts", "leases", "fences", "worktrees", "holds"];
     /* 卡 253：动作缝（POST，白名单在宿主半）与服务现读（GET）。 */
     const ACTION_ROUTE = "__ACTION_ROUTE__";
     const STACK_STATUS_ROUTE = "__STACK_STATUS_ROUTE__";
@@ -2965,7 +2965,7 @@ __TARGETS__
               h("button", { style: UI.seg,
                 onClick: () => control.run("start-all", "") }, "全部起"))),
           h("p", { style: UI.muted },
-            up ? "工作台 dashboard：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
+            up ? "工作台 dashboard：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树 / 整窗七块"
               : "没起时怎么起：" + String(target.up || ""))),
         openError ? errorLine("打开失败", openError) : null,
         h("iframe", { src: target.url, style: UI.frame, title: "工作台" }));
@@ -3011,7 +3011,7 @@ __TARGETS__
         h(View));
     }
 
-    /* ---- workbench_board：六块，原样 ---- */
+    /* ---- workbench_board：七块，原样 ---- */
     function sectionBlock(key, block, note) {
       if (block === null || block === undefined) {
         return h("section", { key, "data-wb-state": "missing" },
@@ -3318,7 +3318,7 @@ CLIENT_JS = _client_js()
 INSTALL_DOC = """# 全局面板（快捷入口 + 一键启动）—— 安装 / 接线说明（卡 221~253）
 
 把工作台**三个真实页面**接进 DSH：左栏三行是**快捷入口** —— 每行点开默认给
-「开真实页面」的入口 + 目标页连不上时的「没起 + 怎么起」；原来的自绘视图（六块/甘特/列表）
+「开真实页面」的入口 + 目标页连不上时的「没起 + 怎么起」；原来的自绘视图（七块/甘特/列表）
 **保留**成可选的「内嵌读数」分支。目的只有一个 —— 用户令：*「尽量不要让我切来切去」*、
 *「开到左边栏里」*、*「禅道直接跳可以吗…开真实页面」*（2026-10-15）。
 
@@ -3552,7 +3552,7 @@ IconGaugeOutlineArtwork（:2050）、timeflow = IconClockOutlineArtwork（:2017�
 | 方向 | 路径 | 方法 | 说明 |
 |---|---|---|---|
 | 读 | `/dsh-panel/stack-status` | GET | 服务现读：端口 / RSS / 日志尾（卡 A289：TTL 5s 缓存） |
-| 读 | `/dsh-panel/workbench-board` | GET | 工作台六块读数 |
+| 读 | `/dsh-panel/workbench-board` | GET | 工作台七块读数 |
 | 读 | `/dsh-panel/zentao-gantt` | GET | 禅道甘特（脚本回退视图） |
 | 读 | `/dsh-panel/timeflow-inbox` | GET | 时间流收件箱 |
 | 读 | `/dsh-panel/card-tree` | GET | 卡谱系树（`tools/wb_tree.py --json`，卡 A302） |

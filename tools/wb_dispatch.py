@@ -120,6 +120,7 @@ import workbench_bridge  # noqa: E402 —— 工作台状态一处真源（卡 2
 #   `wb_dispatch --execute` 时不变量 ①②③⑤ 全部失效、且对其他窗口不可见（一树两写者不会被咬）。
 from pool import account_id as pool_account_id  # noqa: E402 —— 名字↔号 唯一映射（卡 A344）
 from pool import guards as pool_guards  # noqa: E402 —— 守卫唯一实现（pool.guards）
+from pool import model_registry as pool_model_registry  # noqa: E402 —— 别名归一（卡 A392）
 from pool import outcomes as pool_outcomes  # noqa: E402 —— 按请求算结局，判据唯一真源（卡 A355）
 from pool import registry as pool_registry  # noqa: E402 —— 作业登记唯一实现（pool.registry）
 from pool import rpm as pool_rpm  # noqa: E402 —— 每分钟派活闸（卡 A340，magpie 的 MaxRPM）
@@ -138,7 +139,6 @@ from pool.model_registry import (  # noqa: E402 —— 一层注册表 + 按池�
     default_model_for,
     effective_allowed_for,
     get_adapter,
-    id_names,
     load_registry,
     minimum_ruleset_text,
     narrow_for_caller,
@@ -1674,15 +1674,9 @@ def _alias_table() -> dict[str, tuple[str, ...]] | None:
     except (ModelRegistryError, OSError):
         _ALIAS_TABLE = None
         return None
-    table: dict[str, tuple[str, ...]] = {}
-    for entry in entries:
-        names = id_names(str(entry.id))
-        for alias in names:
-            key = alias.strip().lower()
-            if key and key not in table:
-                table[key] = names
-    _ALIAS_TABLE = table
-    return table
+    # ★ 卡 A392：建表逻辑下沉到 `model_registry.build_alias_table()`（唯一一份）。
+    _ALIAS_TABLE = pool_model_registry.build_alias_table(entries)
+    return _ALIAS_TABLE
 
 
 def reset_model_aliases() -> None:
@@ -1695,39 +1689,24 @@ def reset_model_aliases() -> None:
 def model_aliases(name: str) -> tuple[str, ...]:
     """一个模型名的全部写法：原形 + 别名（卡 E97，`usage_in()` 归一口径的唯一实现）。
 
-    三档口径**不另写一套**，直接复用 `tools/pool/model_registry.py::id_names`（原样 /
-    最后一个 `/` 之后 / 第一个 `/` 之后）；注册表读得到时再把同一个模型在表里的其它写法
-    补进来。★ **大小写不敏感**：注册表里是 `huaweicloud-maas/GLM-5.2`，而
-    `gates/diag/wb-usage.jsonl` 的 `模型` 字段写的是小写 `glm-5.2` —— 不归一就恒 0；
-    反过来 `glm-5.2` 也要能命中写成 `GLM-5.2` 的行。
+    ★ **卡 A392 起实现只有一份**：别名组 + 大小写不敏感 + 「读不到 ⇒ 只剩 `id_names`
+      三档」都在 `tools/pool/model_registry.py` 的 `aliases_from()` 里；本函数是**薄委托**
+      （签名与返回值逐字不变，`_alias_table()` 的「只读盘一次」仍在本模块 —— 它读的仍是
+      本模块的 `load_registry`，`tests/test_usage_in_alias.py` 的 ④/⑤ 钉着这条）。
 
-    注册表读不到 ⇒ 只回 `id_names(name)` 那三档（`_matches_model()` 会退回字面相等）。
+    三档口径复用 `model_registry.id_names`（原样 / 最后一个 `/` 之后 / 第一个 `/` 之后）；
+    注册表读得到时再把同一个模型在表里的其它写法补进来。★ 大小写不敏感：注册表里是
+    `huaweicloud-maas/GLM-5.2`，`gates/diag/wb-usage.jsonl` 的 `模型` 字段写小写 `glm-5.2`。
     """
-    base = str(name or "").strip()
-    if not base:
-        return ()
-    seen: list[str] = []
-    for alias in id_names(base):
-        if alias not in seen:
-            seen.append(alias)
-    table = _alias_table()
-    if table is not None:
-        for alias in list(seen):
-            for extra in table.get(alias.strip().lower(), ()):
-                if extra not in seen:
-                    seen.append(extra)
-    return tuple(seen)
+    return pool_model_registry.aliases_from(_alias_table(), name)
 
 
 def _matches_model(row_name: object, model: str) -> bool:
-    """用量行的 `模型` 是否算这个模型：任一别名命中即算；注册表读不到 ⇒ 字面相等。"""
-    raw = str(row_name or "").strip()
-    if not raw:
-        return False
-    if _alias_table() is None:  # fail-open：注册表坏了不许一律回 0
-        return raw == model.strip()
-    wanted = {alias.lower() for alias in model_aliases(model)}
-    return raw.lower() in wanted
+    """用量行的 `模型` 是否算这个模型：任一别名命中即算；注册表读不到 ⇒ 字面相等。
+
+    ★ 卡 A392：判定在 `model_registry.matches_from()`；本函数只把本模块的别名表递进去。
+    """
+    return pool_model_registry.matches_from(_alias_table(), row_name, model)
 
 
 def usage_in(model: str, start: datetime, end: datetime, *,

@@ -41,8 +41,11 @@ r"""外部用量上报：整批校验 + `rid` 幂等 + 上报行不计入限额�
   · **不加锁**：magpie 的两段式是在网关的 `mu` 里做的；pool 本卡不引第三种锁，
     并发下两条同 `rid` 的批可能都写进去（如实记在缺口里，不假装解决了）。
 
-★ **本卡零接线**：`tools/wb_dispatch.py` 一个字节都没改。`merged_tokens()` 今天**零生产调用方**，
-`usage_in()` 还没有 `include_reported` 参数 —— 那是下一张卡。
+★ **读端已接线（卡 A392 · T-AG683）**：`merged_tokens(include_reported=True)` 的生产消费者是
+只读读数面 `tools/pipeline_view.py` 的 holds 块（经下面的 `reported_summary()`）；它**仍然
+不进派活链** —— `tools/wb_dispatch.py` / `tools/pool/limits_check.py` / `tools/pool/holds_wiring.py`
+零 import、零调用，钉子见 `tests/test_f43_read_face.py`。`usage_in()` 没有加
+`include_reported` 参数，将来也不该加（那是限额判断，不许消费上报账）。
 """
 
 from __future__ import annotations
@@ -55,6 +58,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+from . import model_registry as _model_registry
 
 if TYPE_CHECKING:
     from typing import Any
@@ -571,7 +576,10 @@ def _dispatch_tokens(model: str, start: datetime, end: datetime, root: Path) -> 
         if not isinstance(row, dict):
             continue
         record = cast("dict[str, Any]", row)
-        if record.get("模型") != model:
+        # ★ 卡 A392：模型比较走别名归一（与 `tools/wb_dispatch.py::usage_in()` 同一份实现）。
+        #   从前是字面比 ⇒ 同一次调用的三种写法（glm-5.2 / GLM-5.2 /
+        #   huaweicloud-maas/GLM-5.2）会算出三个不同的数。
+        if not _model_registry.matches_model(record.get("模型"), model):
             continue
         verdict = f"{record.get('判决') or ''} {record.get('退出码') or ''}".lower()
         if "dry" in verdict:
@@ -587,18 +595,34 @@ def _dispatch_tokens(model: str, start: datetime, end: datetime, root: Path) -> 
     return total
 
 
-def _reported_tokens(model: str, start: datetime, end: datetime, root: Path) -> int:
-    """上报账里同模型、同窗口的 token 之和（`in + out + cache_read`，同样不做减法）。
+def reported_summary(model: str, start: datetime, end: datetime, *,
+                     root: Path | str | None = None) -> tuple[int, bool | None]:
+    """上报账里同模型、同窗口的 token 之和与「有没有价」（卡 A392 的读端）。
 
-    ★ 上报行**没有** `判决`/`退出码`，所以「`dry` 行跳过」这条在它们身上没有对应物：
-      上报的是「外面真调了一次」，不是一个 dry run。如实写。
+    返回 `(tokens, priced)`：
+
+    * `tokens` = 命中行的 `in + out + cache_read`（与 `merged_tokens()` 同一口径）；
+    * `priced` = `True`（命中的每一行都带了 `cost`）/ `False`（至少一行没价）/
+      `None`（这一窗**一行都没有**）。
+
+    ★ **为什么无价要单独说**：上报行的 `cost` 是可选的（`:378-382` 缺席就落 `null`），
+      而它**按账号归不了**（`FIELDS` 没有 `account`，`_reported_row()` 还主动剥掉五个
+      身份栏），价又没有权威单价表 ⇒ 它**不能**进限额的 spent / unpriced。读数面能做、
+      也必须做的只是：让读的人看见「这一窗另有多少 token、其中有没有没价的」——
+      没价就是 `False`，**不许**润色成「花了 0 元」或「没有这笔」。
+    ★ 读不出来 / 文件不存在 / 半行坏 JSON ⇒ 跳过；**一行都没读出来**才回 `(0, None)`，
+      与 `merged_tokens()` 的「跳过或回 0，不猜、不抛」同一条纪律。
+    ★ 模型比较走别名归一（`pool.model_registry` 唯一实现）；注册表读不到 ⇒ 字面相等。
     """
-    path = root.joinpath(*REPORTED_REL)
+    base = Path(root) if root is not None else TOOL_ROOT
+    path = base.joinpath(*REPORTED_REL)
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return 0
+        return 0, None
     total = 0
+    rows = 0
+    all_priced = True
     for line in text.splitlines():
         if REPORTED_MARK not in line:
             continue
@@ -609,15 +633,40 @@ def _reported_tokens(model: str, start: datetime, end: datetime, root: Path) -> 
         if not isinstance(row, dict):
             continue
         record = cast("dict[str, Any]", row)
-        if record.get("source") != SOURCE_REPORTED or record.get("model") != model:
+        if record.get("source") != SOURCE_REPORTED:
+            continue
+        if not _model_registry.matches_model(record.get("model"), model):
             continue
         when = _moment(record.get("t"))
         if when is None or not start <= when < end:
             continue
+        rows += 1
         total += _number(record.get("in"))
         total += _number(record.get("out"))
         total += _number(record.get("cache_read"))
-    return total
+        if not _priced(record.get("cost")):
+            all_priced = False
+    if not rows:
+        return 0, None
+    return total, all_priced
+
+
+def _priced(cost: object) -> bool:
+    """这一行上报**有没有价**：`cost` 是数（含 0）才算有价；缺席 / `null` / 字符串都不算。
+
+    ★ 只有 `_cost_field()` 校验过的行才会落盘，所以这里不重做那三条判据，只认形状。
+    """
+    return isinstance(cost, (int, float)) and not isinstance(cost, bool)
+
+
+def _reported_tokens(model: str, start: datetime, end: datetime, root: Path) -> int:
+    """上报账里同模型、同窗口的 token 之和（`reported_summary()` 的 token 那一半）。
+
+    ★ 扫描只有一份：本函数是薄包装（`merged_tokens()` 与读数面吃同一个数）。
+    ★ 上报行**没有** `判决`/`退出码`，所以「`dry` 行跳过」这条在它们身上没有对应物：
+      上报的是「外面真调了一次」，不是一个 dry run。如实写。
+    """
+    return reported_summary(model, start, end, root=root)[0]
 
 
 def merged_tokens(model: str, start: datetime, end: datetime, *, root: Path | str | None = None,
@@ -630,8 +679,8 @@ def merged_tokens(model: str, start: datetime, end: datetime, *, root: Path | st
     `include_reported` 保持默认 `False`。
 
     ★ ★ `include_reported=False` 时**逐字等于** `tools/wb_dispatch.py::usage_in()` 只读
-    `wb-usage.jsonl` 的口径，逐条复述如下（改口径必须两边一起改，或者把 `usage_in()` 改成调本函数
-    —— 那是下一张卡，本卡零接线）：
+    `wb-usage.jsonl` 的口径，逐条复述如下（改口径必须两边一起改；卡 A392 把「模型名怎么算
+    同一个」这一条下沉成了 `tools/pool/model_registry.py` 的同一份实现，别的仍各写各的）：
 
     * **时区钉死 `+08:00`**：行里的 `开始` / `结束` 是秒级、**无时区**的本地串
       （`append_usage_line()` 用 `datetime.fromtimestamp().isoformat()` 写）。这里按
@@ -650,6 +699,8 @@ def merged_tokens(model: str, start: datetime, end: datetime, *, root: Path | st
 
     `include_reported=True` 时把上报账里同模型、同窗口的 token 也加进来 —— 上报行的 `t` 是
     RFC 3339（带时区），按同一区间 `[start, end)` 比；token 同样是 `in + out + cache_read` 全加。
+    ★ 生产消费者是**只读读数面** `tools/pipeline_view.py` 的 holds 块（卡 A392，经
+      `reported_summary()`）；派活链**一个消费者都没有**，也不许有。
     """
     base = Path(root) if root is not None else TOOL_ROOT
     total = _dispatch_tokens(model, start, end, base)

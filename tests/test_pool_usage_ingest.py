@@ -37,6 +37,15 @@
      上报行的 ``caller`` / ``key`` / ``account`` / ``caller_key_id`` / ``caller_key_name``
      五个身份栏位一律剥掉 —— 这张卡的账里不记「谁报的」，只记「报了什么」。
 
+卡 A392（T-AG683）追加两条：
+
+  ⑮ ``test_merged_tokens_counts_every_alias_of_the_same_model``
+     同一模型的三种写法（glm-5.2 / GLM-5.2 / huaweicloud-maas/GLM-5.2）在
+     ``include_reported=False`` 全 60、``True`` 全 1060；不像的名字回 0。
+  ⑯ ``test_reported_summary_is_stable_after_double_ingest``
+     同一条上报行 ingest 两次 ⇒ ``accepted`` 1→0、``skipped`` 0→1、文件仍 1 行，
+     ``reported_summary`` 与 ``merged_tokens`` 都只算一次。
+
 ★ 零接线：本文件**不 import** ``tools/wb_dispatch.py``、不碰任何既有账本，全部落在 ``tmp_path``。
 
 ★ 导入口径：一律走包路径 ``from tools.pool import usage_ingest``，不往 ``sys.path`` 里塞
@@ -51,6 +60,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from tools.pool import model_registry
 from tools.pool import usage_ingest as ui
 
 if TYPE_CHECKING:  # 只在注解里出现（本文件有 `from __future__ import annotations`）
@@ -109,6 +119,14 @@ def _rows(root: Path) -> list[str]:
     if not path.is_file():
         return []
     return path.read_text(encoding="utf-8").splitlines()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_alias_cache():
+    """别名表是模块级缓存（卡 A392）—— 每条用例从「没读过盘」开始，跑完再清一次。"""
+    model_registry.reset_model_aliases()
+    yield
+    model_registry.reset_model_aliases()
 
 
 # ---------------------------------------------------------------- ① 单条进得去
@@ -429,3 +447,59 @@ def test_reported_rows_do_not_count_by_default(tmp_path: Path) -> None:
     assert ui.merged_tokens("m", start, end, root=tmp_path, include_reported=True) == 1060
     # 模型对不上的行哪本账都不算
     assert ui.merged_tokens("zzz", start, end, root=tmp_path, include_reported=True) == 0
+
+
+# ----------------------------------- ⑮ 别名归一：同一模型的三种写法同一个数（卡 A392）
+
+#: 同一个模型的三种写法 —— 派活账写小写裸名，注册表写 `huaweicloud-maas/GLM-5.2`。
+ALIASES = ("glm-5.2", "GLM-5.2", "huaweicloud-maas/GLM-5.2")
+
+
+def test_merged_tokens_counts_every_alias_of_the_same_model(tmp_path: Path) -> None:
+    """判据 1（卡 A392）：三种写法 ``False`` 全 60、``True`` 全 1060；别的模型仍是 0。
+
+    ★ 反例（变异 1）是把 ``_dispatch_tokens`` 的模型比较改回字面 —— 那时后两种写法
+      在 ``include_reported=True`` 下只有上报账那 1000，与 1060 差 60。
+    """
+    _write_dispatch_usage(tmp_path, model="glm-5.2")
+    start = datetime(2026, 10, 13, 0, 0, 0, tzinfo=TZ)
+    end = datetime(2026, 10, 14, 0, 0, 0, tzinfo=TZ)
+
+    # 外面报来 400 + 300 + 300 = 1000，模型写成大写
+    ui.ingest(
+        _body(_record(model="GLM-5.2", **{"in": 400, "out": 300, "cache_read": 300})),
+        now=NOW,
+        root=tmp_path,
+    )
+
+    for name in ALIASES:
+        assert ui.merged_tokens(name, start, end, root=tmp_path) == 60, name
+        assert ui.merged_tokens(
+            name, start, end, root=tmp_path, include_reported=True) == 1060, name
+    # 别名归一不是「任何名字都命中」
+    assert ui.merged_tokens("kimi-k3-1", start, end, root=tmp_path,
+                            include_reported=True) == 0
+
+
+# ----------------------------------- ⑯ 读端幂等：同一条上报行只算一次（卡 A392）
+
+
+def test_reported_summary_is_stable_after_double_ingest(tmp_path: Path) -> None:
+    """判据 2（卡 A392）：连 ingest 两次只落一行、只算一次（读端与写端同一条去重）。"""
+    _write_dispatch_usage(tmp_path, model="glm-5.2")
+    start = datetime(2026, 10, 13, 0, 0, 0, tzinfo=TZ)
+    end = datetime(2026, 10, 14, 0, 0, 0, tzinfo=TZ)
+    body = _body(_record(model="GLM-5.2", **{"in": 400, "out": 300, "cache_read": 300}))
+
+    first = ui.ingest(body, now=NOW, root=tmp_path)
+    second = ui.ingest(body, now=NOW, root=tmp_path)
+    assert (first["accepted"], first["skipped"]) == (1, 0)
+    assert (second["accepted"], second["skipped"]) == (0, 1)
+
+    path = _reported_file(tmp_path)
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 1, "第二次 ingest 又写了一行"
+    assert ui.reported_summary("glm-5.2", start, end, root=tmp_path) == (1000, False), (
+        "这一行没带 cost ⇒ 有行无价（False），token 只算一次")
+    assert ui.merged_tokens("glm-5.2", start, end, root=tmp_path,
+                            include_reported=True) == 1060
+

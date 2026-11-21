@@ -124,14 +124,14 @@ stdio 那条路**一个字节不变**（无参数仍是 stdio）。
   不许冻住 stdio；卡 130）。★★ **逐卡域守卫照走**：碰了域外文件 ⇒ 子进程非零退出，
   回话**原样带出**它的输出与退出码、`isError=true`，**绝不静默**（域守卫在 MCP 这条路上也不能绕）。
 
-## ★★ 工作台面（卡 213 · T-G325）：`workbench_board` —— 会话内看全六块
+## ★★ 工作台面（卡 213 · T-G325）：`workbench_board` —— 会话内看全七块
 
 一个**只读**工具，把卡 207 的 `tools/pipeline_view.py` 的一份读数（卡 / 门禁 / 判决 / 租约 /
-栅栏 / 卡树**六块**）收成一份端到会话内 —— 用户原话「尽量**不要让我切来切去**」的第 1 个面。
+栅栏 / 卡树 / 整窗**七块**）收成一份端到会话内 —— 用户原话「尽量**不要让我切来切去**」的第 1 面。
 
 - ★ **判据只有一份**：本工具**只调** `pipeline_view.py --json`（子进程），**不重写**读队列 /
   读门禁的逻辑 —— 这正是卡 207 存在的意义。
-- ★ 参数 `section`：不给 = 一次看全六块；给了 = 只要那一块。
+- ★ 参数 `section`：不给 = 一次看全七块；给了 = 只要那一块。
 - ★ **缺什么说什么**：某块是 `null` + 说明时**原样透传** —— 不许洗成空对象、不许省略。
 - ★ 子进程带 `NO_WINDOW` 且**限时**（`WORKBENCH_TIMEOUT`）：非零 / 超时 / 起不来都**如实报错**
   （`isError=true`、`reading=null`），**绝不**返回一个"看起来正常"的空板子。
@@ -370,8 +370,9 @@ def _drain_line() -> int:
 #: 测试可把 `PIPELINE_VIEW` 换成一个"故意非零"的桩脚本，验 `workbench_board` 会如实报错。
 PIPELINE_VIEW = ROOT / "tools" / "pipeline_view.py"
 
-#: `workbench_board` 的六块（顺序即 `pipeline_view` 的块序）。
-WORKBENCH_SECTIONS = ("cards", "gates", "verdicts", "leases", "fences", "worktrees")
+#: `workbench_board` 的七块（顺序即 `pipeline_view` 的块序）。
+WORKBENCH_SECTIONS = ("cards", "gates", "verdicts", "leases", "fences", "worktrees",
+                      "holds")
 
 #: workbench_board 的两档 payload 口径（卡 E125）：默认 summary（瘦），full 才给全明细。
 #: ★ 只许这一个开关 —— 不许再加 verbose 之类第二个口径（同一个意思只许一种说法）。
@@ -534,20 +535,20 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "workbench_board",
         "description": (
-            "工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树六块"
+            "工作台一份读数（卡 213）：卡 / 门禁 / 判决 / 租约 / 栅栏 / 卡树 / 整窗七块"
             "收成一份（只读，走 pipeline_view.py --json，不重写判据）。"
             "默认瘦（fields=summary）：cards 每行 files/depends 只给计数（files_n/depends_n）、"
             "已完卡（status=done）折叠成只含 id 与 status 的骨架行（行数与顺序都不动）；"
             "verdicts 每行 attempts 只给计数（attempts_n）；worktrees 的 path 相对读数根。"
             "fields=full 才给全明细（与 pipeline_view 逐键相同）。"
-            "section 不给=一次看全六块；某块缺来源会如实给 null + 说明。"
+            "section 不给=一次看全七块；某块缺来源会如实给 null + 说明。"
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "section": {
                     "type": "string",
-                    "description": "只要哪一块；不给=六块全给",
+                    "description": "只要哪一块；不给=七块全给",
                     "enum": list(WORKBENCH_SECTIONS),
                 },
                 "fields": {
@@ -1997,7 +1998,7 @@ def tool_workbench_board(
 ) -> tuple[str, dict[str, Any], bool]:
     """工作台一份读数（卡 213）—— **只调** `tools/pipeline_view.py --json`，**不重写判据**。
 
-    ★ 判据只许一份真源（卡 207 的 `pipeline_view` 把六块收成一份）：这里**不**读队列 /
+    ★ 判据只许一份真源（卡 207 的 `pipeline_view` 把七块收成一份）：这里**不**读队列 /
       不读门禁 / 不读租约，只把它的 `--json` **原样**端出来。
     ★ 缺什么说什么：某块是 `null` + 说明时**原样透传** —— 不许洗成空对象、不许省略。
     ★ 子进程带 `NO_WINDOW` 且**限时**（`WORKBENCH_TIMEOUT`）：非零 / 超时 / 起不来都
@@ -2006,7 +2007,7 @@ def tool_workbench_board(
     section = str(arguments.get("section") or "").strip() or None
     if section is not None and section not in WORKBENCH_SECTIONS:
         text = (
-            f"workbench_board：不认识的 section={section!r}；六块是："
+            f"workbench_board：不认识的 section={section!r}；七块是："
             + "、".join(WORKBENCH_SECTIONS)
             + "。不给 section 就一次给全。"
         )
@@ -2071,7 +2072,7 @@ def tool_workbench_board(
         )
     reading = _board_compact(reading, fields, root)
     shown = [section] if section is not None else list(WORKBENCH_SECTIONS)
-    lines = [f"工作台读数（workbench_board）—— 来自 `{command}`（卡 207 的一份读数，六块）："]
+    lines = [f"工作台读数（workbench_board）—— 来自 `{command}`（卡 207 的一份读数，七块）："]
     lines += [_board_line(sec, reading) for sec in shown]
     data = {
         "command": command,
@@ -3308,7 +3309,7 @@ def _initialize(params: dict[str, Any]) -> dict[str, Any]:
             "quota_status（卡 201）按「记录时间 vs 现实时间」判额度四态 —— "
             "限流中 / 已过期，需重新探测 / 余额耗尽 / 未记录，不猜、不探测。"
             "workbench_board（卡 213）把 pipeline_view 的一份读数（卡 / 门禁 / 判决 / 租约 / "
-            "栅栏 / 卡树六块）收成一份端到会话内 —— 不给 section 就一次看全六块，"
+            "栅栏 / 卡树 / 整窗七块）收成一份端到会话内 —— 不给 section 就一次看全七块，"
             "某块缺来源会如实给 null + 说明（不洗成空对象）。默认瘦（fields=summary）："
             "cards 每行 files/depends 只给计数（files_n/depends_n）、已完卡折叠成只含 id 与 "
             "status 的骨架行（行数与顺序不动），verdicts 每行 attempts 只给计数（attempts_n），"

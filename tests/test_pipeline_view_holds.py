@@ -14,8 +14,10 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
+from datetime import datetime, timezone
 
 import pytest
 
@@ -55,10 +57,26 @@ def _wiring():
     return holds_wiring
 
 
+def _ui():
+    """上报账的判据层（卡 A392）—— 只调它，不在这里抄第二份扫描。"""
+    _sys_paths()
+    from pool import usage_ingest
+
+    return usage_ingest
+
+
 # --------------------------------------------------------------------------- 夹具
 def _account(ident: str = "codearts-1", *, platform: str = "codearts",
-             models: list[str] | None = None, with_used: float | None = None) -> str:
-    """一段 `[[account]]` 的 TOML 文本（`with_used=None` ⇒ **不写** `used_percent`）。"""
+             models: list[str] | None = None, with_used: float | None = None,
+             reset_at: str | None = None, span_days: int | None = None) -> str:
+    """一段 `[[account]]` 的 TOML 文本（`with_used=None` ⇒ **不写** `used_percent`）。
+
+    ★ `reset_at` / `span_days` 是 `tools/pool/holds_wiring.py::window_from_account()`
+      今天**读的那两个键**（卡 A369 的口径）。★ 已知分歧（如实记，本卡不许改薄层）：
+      `tools/pool_accounts.py` 卡 A370 校验/写入的账本键是 `resets_at` / `span_s` ——
+      真账本写这两个名字，薄层读的是那两个名字 ⇒ 真机窗口仍落 `clock`。本夹具按**薄层
+      读的名字**造，才走得到「有窗口」那一档（这是本卡判据 3 的前提）。
+    """
     approved = models if models is not None else ["huaweicloud-maas/deepseek-v4.1-flash"]
     body = "".join([
         "[[account]]\n",
@@ -79,7 +97,23 @@ def _account(ident: str = "codearts-1", *, platform: str = "codearts",
     ])
     if with_used is not None:
         body += f"used_percent = {with_used}\n"
+    if reset_at is not None:
+        body += f'reset_at = "{reset_at}"\n'
+    if span_days is not None:
+        body += f"span_days = {span_days}\n"
     return body
+
+
+#: 「有窗口」的号：used 够抬高门槛、边界又罩住 2016-11 之后的一切时刻。
+#: ★ 用 2099 当重置时刻，是为了让用例不会在几年后自己变红（和 `now` 无关的那部分写死）。
+_WINDOWED_RESET = "2099-01-01T00:00:00+00:00"
+_WINDOWED_SPAN_DAYS = 30000
+
+
+def _windowed_account(ident: str = "codearts-1") -> str:
+    """一个有窗口的号（`since` 非空 ⇒ 上报账才有窗口可归属）。"""
+    return _account(ident, with_used=50.0, reset_at=_WINDOWED_RESET,
+                    span_days=_WINDOWED_SPAN_DAYS)
 
 
 def json_str(value: str) -> str:
@@ -212,4 +246,94 @@ def test_json_identical_cold_then_hot(
     hot = tpv._run_cli(repo, "--json")
     assert cold == hot, "冷热两次 --json 不一致 ⇒ 读数不幂等"
     assert '"holds"' in cold, "冷跑里连 holds 键都没有"
+
+
+# ------------------------------------------------------- 卡 A392：上报账那两列
+#: 上报行要按**这一行**的模型来对（账本里 approved_models 的第一条）。
+MODEL = "huaweicloud-maas/deepseek-v4.1-flash"
+
+#: 写上报行时那个「现在」（够早，不会撞上「未来 1 小时」那条判据）。
+_INGEST_NOW = datetime(2026, 10, 13, 8, 0, 0, tzinfo=timezone.utc)
+
+
+def _reported(**override: object) -> dict[str, object]:
+    """一条最小可用的上报记录（`in+out+cache_read` 默认 400+300+300=1000）。"""
+    base: dict[str, object] = {
+        "rid": "r1", "agent": "a", "provider": "p", "model": MODEL, "status": 200,
+        "t": "2026-10-13T08:00:00Z", "in": 400, "out": 300, "cache_read": 300,
+    }
+    base.update(override)
+    return base
+
+
+def _ingest_reported(repo: pathlib.Path, *records: dict[str, object]) -> None:
+    """走**真写入口**落上报行（不手搓 JSONL：读写两侧共用同一份判据）。"""
+    text = json.dumps(list(records))
+    _ui().ingest(text, now=_INGEST_NOW, root=repo)
+
+
+def test_holds_row_flags_unpriced_reported_rows(
+        repo: pathlib.Path, tmp_path: pathlib.Path, monkeypatch) -> None:
+    """判据 3（卡 A392）：无价的上报行在读数面**如实标**，但一个字都不改判据。
+
+    四态：没有上报行 ⇒ `(0, None)`；一条没价 ⇒ `(1000, False)`；再来一条带价 ⇒ 仍 `False`；
+    两条都带价 ⇒ `(…, True)`。同时钉住 why / why_text / cost / priced 与基线**逐字相同**。
+    """
+    pv = _pv()
+    wiring = _wiring()
+    monkeypatch.setenv(wiring.LEDGER_ENV, str(_ledger(tmp_path, _windowed_account())))
+    base = pv.build_reading(repo)["holds"][0]
+    assert base["since"], f"这个号该有窗口起点（判据 3 的前提）：{base!r}"
+    assert (base["reported_tokens"], base["reported_priced"]) == (0, None)
+
+    # ① 一条**不带 cost** 的上报行 ⇒ 有行无价
+    _ingest_reported(repo, _reported())
+    row = pv.build_reading(repo)["holds"][0]
+    assert row["reported_tokens"] == 1000, row
+    assert row["reported_priced"] is False, f"没价不许洗成 0：{row!r}"
+    # 上报账**不许**改判据：why / why_text / cost / priced 与没有上报行时逐字相同
+    assert (row["why"], row["why_text"]) == (base["why"], base["why_text"]), row
+    assert row["cost"] == base["cost"], row
+    assert row["priced"] is False, "priced 仍来自 holds_wiring 的常量（不因上报行带价翻真）"
+
+    # ② 再来一条**带 cost** 的 ⇒ 只要有一行没价就仍是 False
+    _ingest_reported(repo, _reported(rid="r2", cost=2.5, **{"in": 100, "out": 100,
+                                                            "cache_read": 100}))
+    row2 = pv.build_reading(repo)["holds"][0]
+    assert row2["reported_tokens"] == 1300, row2
+    assert row2["reported_priced"] is False, f"混着一行没价 ⇒ 整体是 False：{row2!r}"
+
+    # ③ 两条都带价 ⇒ True（0.0 也是一个价，不许当成「没有」）
+    path = repo / "gates" / "diag" / "usage-reported.jsonl"
+    path.unlink()
+    _ingest_reported(repo, _reported(rid="p1", cost=2.5),
+                     _reported(rid="p2", cost=0.0, **{"in": 100, "out": 100,
+                                                      "cache_read": 100}))
+    row3 = pv.build_reading(repo)["holds"][0]
+    assert row3["reported_tokens"] == 1300, row3
+    assert row3["reported_priced"] is True, f"都有价 ⇒ True：{row3!r}"
+
+
+def test_missing_reported_ledger_is_zero_not_a_crash(
+        repo: pathlib.Path, tmp_path: pathlib.Path, monkeypatch) -> None:
+    """判据 4（卡 A392）：上报账**不存在**或**坏掉** ⇒ 两列 0 / None，读数面不抛。"""
+    pv = _pv()
+    wiring = _wiring()
+    monkeypatch.setenv(wiring.LEDGER_ENV, str(_ledger(tmp_path, _windowed_account())))
+
+    rows = pv.build_reading(repo)["holds"]
+    assert rows, "账本里有一个号，读数块就该有一行"
+    for row in rows:
+        assert row["reported_tokens"] == 0, row
+        assert row["reported_priced"] is None, row
+
+    # 坏文件：半行 JSON（带 REPORTED_MARK 但 parse 不了）⇒ 跳过，不许带崩读数
+    path = repo / "gates" / "diag" / "usage-reported.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"source": "reported", "model": "' + MODEL + '"\n', encoding="utf-8")
+    rows2 = pv.build_reading(repo)["holds"]
+    for row in rows2:
+        assert row["reported_tokens"] == 0, row
+        assert row["reported_priced"] is None, row
+
 

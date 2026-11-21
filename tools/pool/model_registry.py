@@ -61,7 +61,13 @@ from typing import TYPE_CHECKING, Any
 
 import tomllib
 
-from pool.models import find_pool_dir, load_switches
+try:  # 包路径 `pool.model_registry`（派活器 / MCP 面）
+    from pool.models import find_pool_dir, load_switches
+except ImportError:  # pragma: no cover —— `tools.pool.model_registry`（只给了仓库根的那种导入）
+    # ★ 卡 A392：读数面 `tools/pool/usage_ingest.py` 由 `tests/test_pool_usage_ingest.py`
+    #   以 `from tools.pool import usage_ingest` 装载（不往 `sys.path` 塞 `tools/`）——
+    #   那里 `pool` 这个顶层名不存在，但 `tools.pool.models` 在。两条路径同一个文件。
+    from tools.pool.models import find_pool_dir, load_switches  # type: ignore[no-redef]
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
     from collections.abc import Sequence
@@ -670,6 +676,115 @@ def id_names(model_id: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+# ---------------------------------------------------------------- 模型别名归一（卡 A392）
+#
+# 这一支**只给读数面用**：`tools/pool/usage_ingest.py` 的 `merged_tokens()` /
+# `reported_summary()` 与 `tools/wb_dispatch.py::usage_in()` 共用**同一份**实现。
+# ★ 它**不许进派活链**（派活顺序 / 限额判断 / 路线选择一律不许消费）—— 钉子见
+#   `tests/test_f43_read_face.py`。
+
+#: 别名表的模块级缓存：只在第一次调用时读盘。
+#: ★ 与 `tools/wb_dispatch.py::_alias_table()` 的缓存**各自一份** —— 那边要能被
+#:   `reset_model_aliases()`（wb_dispatch 侧）与测试对 `wb_dispatch.load_registry` 的
+#:   monkeypatch 控制（`tests/test_usage_in_alias.py` 的 ④/⑤ 钉着），这边服务读数面。
+_ALIAS_TABLE: dict[str, tuple[str, ...]] | None = None
+_ALIAS_TABLE_LOADED = False
+
+
+def build_alias_table(entries: Sequence[ModelEntry]) -> dict[str, tuple[str, ...]]:
+    """注册表条目 → 「小写名字 → 该条目的别名组」索引（**纯函数**，不读盘）。
+
+    ★ 别名组本身来自 `id_names()`（原样 / 最后一个 `/` 之后 / 第一个 `/` 之后）——
+      不另写一套切分规则。同一个名字被两个条目声明时，**先登记的赢**（不覆盖）。
+    """
+    table: dict[str, tuple[str, ...]] = {}
+    for entry in entries:
+        names = id_names(str(entry.id))
+        for alias in names:
+            key = alias.strip().lower()
+            if key and key not in table:
+                table[key] = names
+    return table
+
+
+def alias_table() -> dict[str, tuple[str, ...]] | None:
+    """注册表别名表；读不到 ⇒ `None`（调用方退回字面相等，**不是**一律 0）。
+
+    ★ 只在第一次调用时读盘（`load_registry()` 之后结果钉在模块里）。
+    ★ 清缓存钩子是 `reset_model_aliases()`（测试用）。
+    """
+    global _ALIAS_TABLE, _ALIAS_TABLE_LOADED
+    if _ALIAS_TABLE_LOADED:
+        return _ALIAS_TABLE
+    _ALIAS_TABLE_LOADED = True
+    try:
+        entries = load_registry()
+    except (ModelRegistryError, OSError):
+        _ALIAS_TABLE = None
+        return None
+    _ALIAS_TABLE = build_alias_table(entries)
+    return _ALIAS_TABLE
+
+
+def reset_model_aliases() -> None:
+    """清掉 `alias_table()` 的缓存（测试用；下次调用会重新读盘）。"""
+    global _ALIAS_TABLE, _ALIAS_TABLE_LOADED
+    _ALIAS_TABLE = None
+    _ALIAS_TABLE_LOADED = False
+
+
+def aliases_from(table: dict[str, tuple[str, ...]] | None, name: str) -> tuple[str, ...]:
+    """给定别名表，一个模型名的全部写法（原形 + 别名）。
+
+    * 三档口径直接复用 `id_names()`（不另写一套）；
+    * 表里能查到这个名字时，把同一条目的其它写法补进来；
+    * 表是 `None`（注册表读不到）⇒ 只回 `id_names()` 那三档。
+    ★ **大小写不敏感**：`gates/diag/wb-usage.jsonl` 写小写 `glm-5.2`，注册表里是
+      `huaweicloud-maas/GLM-5.2` —— 不归一就恒 0。
+    """
+    base = str(name or "").strip()
+    if not base:
+        return ()
+    seen: list[str] = []
+    for alias in id_names(base):
+        if alias not in seen:
+            seen.append(alias)
+    if table is not None:
+        for alias in list(seen):
+            for extra in table.get(alias.strip().lower(), ()):
+                if extra not in seen:
+                    seen.append(extra)
+    return tuple(seen)
+
+
+def matches_from(
+    table: dict[str, tuple[str, ...]] | None, row_name: object, model: str,
+) -> bool:
+    """用给定别名表判「这一行的模型名算不算 `model`」。
+
+    * 行名 trim 后为空 ⇒ `False`（空串不许命中一切）；
+    * 表是 `None` ⇒ **字面相等**（fail-open：注册表坏了不许把用量一律算成 0）；
+    * 否则任一别名命中即算（大小写不敏感）。
+    """
+    raw = str(row_name or "").strip()
+    if not raw:
+        return False
+    if table is None:  # fail-open：注册表坏了不许一律回 0
+        return raw == model.strip()
+    wanted = {alias.lower() for alias in aliases_from(table, model)}
+    return raw.lower() in wanted
+
+
+def model_aliases(name: str) -> tuple[str, ...]:
+    """一个模型名的全部写法（用本模块缓存的注册表别名表）。"""
+    return aliases_from(alias_table(), name)
+
+
+def matches_model(row_name: object, model: str) -> bool:
+    """用量行的模型名是否算这个模型（用本模块缓存的注册表别名表）。"""
+    return matches_from(alias_table(), row_name, model)
+
+
 def match_disabled(patterns: Sequence[str], names: Sequence[str]) -> str | None:
     """逐个 pattern 比每个名字 ⇒ 返回**原样的 pattern**（不是小写版）；都不中 ⇒ ``None``。
 
@@ -1009,6 +1124,8 @@ __all__ = [
     "disabled_path", "load_disabled", "normalize_disabled", "glob_match",
     "names_of", "id_names", "match_disabled", "model_disabled", "id_disabled",
     "assert_not_disabled",
+    "alias_table", "aliases_from", "build_alias_table", "matches_from",
+    "matches_model", "model_aliases", "reset_model_aliases",
     "registry_path", "load_registry", "entries_for", "resolve_model",
     "default_model_for", "rotation_chain_for", "effective_allowed_for",
     "narrow_for_caller", "clean_caller_patterns",

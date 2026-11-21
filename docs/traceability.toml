@@ -13061,3 +13061,21 @@ evidence = [
   "test:test_gha_cloud_gate.py::test_rewrite_projects_root_missing_file_is_pool_code_not_traceback",
 ]
 gaps = "1. 「五仓都在跑」这句话里有一仓是**红的且是环境性红**（`dsh-gate` 的用例比 `statSync().mode & 0o777`，NTFS 上 `0o700`/`0o600` 落成 `438`）。文档 §9 第 3 条只写清「这是 Windows 语义不是代码坏」，没修它 —— 修法（换 Linux runner 或让源仓判据认平台）超出本卡，判据见 docs/subsystems/ci/GitHub-Actions-云门禁.md §9。2. 五仓的读数形状仍不统一（eng 是 23 门 JSON / fw、ura 是 `passed`+`failed` 的小 JSON / dsh 的 `passed`/`failed` **恒为 0** 没解析计数 / om 是 vitest 四段文本）。要收成一张表得各写提取器，判据在 docs/subsystems/ci/GitHub-Actions-云门禁.md §9 末段。3. 号池桩缺件这条只在 profile 加载与 `_rewrite_projects_root()` 两处兜住，**适配器自己现造桩那条路**（scripts/cloud/gha/adapter.py 的 `_ensure_pool_stub()`）没走这条校验；两条路是两份实现，可能各自漂。4. `[workflow].install` 这条键到今天仍**没有使用者**（写了没跑过）—— 本卡只保证 scripts/cloud/gha/gate_profile.py 的交叉校验不会放它跟 `from_remote_workflows` 同时开，没给它加活用例。"
+
+[entries."T-AG683"]
+id = "T-AG683"
+title = "F43读端接线：上报量进只读读数面，派活链零 import"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/model_registry.py",
+  "file:tools/pool/usage_ingest.py",
+  "file:tools/pipeline_view.py",
+  "file:tests/test_f43_read_face.py",
+  "test:test_pool_usage_ingest.py::test_merged_tokens_counts_every_alias_of_the_same_model",
+  "test:test_pool_usage_ingest.py::test_reported_summary_is_stable_after_double_ingest",
+  "test:test_pipeline_view_holds.py::test_holds_row_flags_unpriced_reported_rows",
+  "test:test_pipeline_view_holds.py::test_missing_reported_ledger_is_zero_not_a_crash",
+  "test:test_f43_read_face.py::test_read_face_stays_off_the_dispatch_path",
+]
+gaps = "- 读端消费者只有 `tools/pipeline_view.py` 的 holds 块（经 `usage_ingest.reported_summary()`）；`merged_tokens(include_reported=True)` 至今没有、将来也不许有派活链消费者。指针 `tools/pool/usage_ingest.py`。- 生产窗口键今天对不上：账本写 `resets_at` / `span_s`（卡 A370），`holds_wiring.window_from_account()` 读 `reset_at` / `span_days` ⇒ 真账本 holds 行 `since` 恒 None，两列在真机恒 0 / None。本卡不许改薄层，如实记。指针 `tools/pool/holds_wiring.py`。- 上报行按账号归属仍无判据（`FIELDS` 没有 `account`，落盘前剥掉五个身份栏）；本卡只按模型 + 窗口出数。指针 `tools/pool/usage_ingest.py`。- 卡规格里「pipeline_view 的 module 条目同步提两列」那半条无落点：`modules.toml` 只登记 `tools/pool/` 的模块，没有 pipeline_view 条目 ⇒ 未做。指针 `docs/subsystems/pool/modules.toml`。- `tools/wb_daily.py` 一行注释仍写「六块读数」（不在本卡域）；它读整份 --json、不按块清单过滤 ⇒ 行为不受影响。指针 `tools/wb_daily.py`。"
