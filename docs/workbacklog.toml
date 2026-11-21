@@ -7289,3 +7289,23 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E155"
+task = "T-AG690"
+title = "重复allow被静默丢弃：argparse只留最后一条"
+tree = ".wt/E155"
+spec = "复盘/卡/卡E155-重复allow被静默丢弃.md"
+files = [
+  "tools/wb_land.py",
+  "tools/pool/landing.py",
+  "tests/test_wb_land.py",
+  "tests/test_pool_landing.py",
+  "docs/changelog.d/T-AG690.md",
+  "docs/traceability.d/T-AG690.toml"
+]
+depends = [
+  "E154"
+]
+risk = "mid"
+status = "pending"
