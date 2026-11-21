@@ -47,7 +47,7 @@
 - **2026-11-08 泛用化**：把「六段各敲哪条」那张表里的 `tools/wb_*.py` / `scripts/run_gates.py` /
   `gates/last.json` / `docs/workbacklog.toml` 全部搬进 `references/repo-bindings.md`；正文那张表改成
   「走哪个动作技能 + 见 repo-bindings」。顺手修了「`wb_daily` 五个分区」（真值 **7** 段）与
-  「`复盘/INDEX.md` 769 篇」（实测目录 950 篇、索引自标 773 篇，两个口径不同）这两处陈旧读数。
+  「`复盘/INDEX.md` 769 篇」（当时实测目录 950 篇、索引自标 773 篇，两个口径不同；2026-11-21 现读目录 1122 篇、索引仍 773 篇）这两处陈旧读数。
 
 ## 脚本接口与以后怎么改
 

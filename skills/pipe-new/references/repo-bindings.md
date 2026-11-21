@@ -42,11 +42,11 @@
 
 ## 本仓实测读数（数字会漂，口径不能漂）
 
-- `python -X utf8 tools/wb_plan.py check`（2026-11-08）⇒ rc=0，末两行
-  `[OK ] backlog 校验通过：339 张卡，无冲突（基点 38522420）` /
-  `[队列] 待派 11 张 / 其它 328 张（★ 只有待派的参与冲突判定与排批）`。
-  **卡数与基点每次都在变**：只写「末行应是 backlog 校验通过」，别把 339 当常量。
-- `python -X utf8 tools/wb_plan.py stats`（同上时刻）⇒ `[统计] 队列共 339 张：待派 11 / 其它（done/failed）328`，
+- `python -X utf8 tools/wb_plan.py check`（2026-11-21）⇒ rc=0，末两行
+  `[OK ] backlog 校验通过：425 张卡，无冲突（基点 38522420）` /
+  `[队列] 待派 11 张 / 其它 414 张（★ 只有待派的参与冲突判定与排批）`。
+  **卡数与基点每次都在变**：只写「末行应是 backlog 校验通过」，别把 425 当常量。
+- `python -X utf8 tools/wb_plan.py stats`（同上时刻）⇒ `[统计] 队列共 425 张：待派 11 / 其它（done/failed）414`，
   并发上限 2 ⇒ 6 批。
 - `python -X utf8 tools/wb_plan.py worktrees`（同上时刻）⇒ 干跑，尾行
   `[dry ] 默认不执行；真要建树加 --execute（基点 38522420）`。
