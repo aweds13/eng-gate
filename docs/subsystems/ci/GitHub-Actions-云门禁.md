@@ -141,41 +141,50 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage al
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
 补丁打不上 / 树陈旧），这套是「造快照」的失败面。两张表各自钉在自己的测试里，别混着记。
 
-## 6. 真读数（2026-11-19）
+## 6. 真读数（最近一趟 2026-11-21：23 门全绿）
 
-镜像仓 `aweds13/eng-gate` 上真跑过**两**趟：先 job `135331686931`（run `44456198821`，head `cdb2c0fa`），
-再 job `135640738507`（run `44547171433`，head `14220c7c` —— 这一趟的树是**仓里这份构建器**造的，
-即 `scripts/cloud/gha/build_snapshot.py --stage all` 的产物）。两趟结论相同：23 门、`not_run` 空、全绿。
+镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136613578025`（run `44830398970`，head `190903a0`
+—— 这一趟的树是**仓里这份构建器**造的，即 `scripts/cloud/gha/build_snapshot.py --repo engineering --stage all`
+的产物）。读数：23 门、`not_run` 空、**红门 0 个**；`render` 是唯一 `EXCLUDED`（金样本采集自主机
+`DEV-HOST`，runner 上不跑，**不算红**）。
 
-第二趟的读数原文（源：job `135640738507` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON，
-本机落盘在 gates/enggate-logs 下的 win-135640738507.reading.json，不进仓）：
+读数原文（源：job `136613578025` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
+本机落盘在 gates/enggate-logs 下，不进仓）：
 
 ```
-ok=True  host=runnervmm7ud1  rev=14220c7c  branch=main  n_gates=23  not_run=[]  at=2026-11-19T15:07:35
-py=3.12.10  workers=4  bad=[]
+ok=True  host=runnervmbpeip  rev=190903a0  branch=main  n_gates=23  not_run=[]  at=2026-11-20T22:57:07
+py=3.12.10  workers=4
 ```
 
-逐门耗时（秒）。源：同一份读数的 `gates[].seconds`，全部 `exit_code=0`：
+逐门耗时（秒）。源：同一份读数的 `gates[].seconds`，22 门 `exit_code=0`、`render` 为 `EXCLUDED`：
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
-| `pytest` | 1256.27 | `ui_dom_probe` | 96.19 |
-| `pytest_chain` | 884.91 | `proxy` | 96.76 |
-| `ui_flow` | 787.57 | `commands` | 95.85 |
-| `acceptance` | 157.29 | `ui_text` | 95.54 |
-| `check_layers_selftest` | 151.62 | `style` | 95.21 |
-| `audit` | 148.73 | `contrast` | 94.90 |
-| `check_layers` | 137.99 | `skills_claims` | 94.45 |
-| `web_live` | 132.38 | `lf1_live` | 97.14 |
-| `docs` | 52.87 | `mypy` | 50.26 |
-| `contract_doc_table` | 53.14 | `audit_titles` | 8.79 |
-| `invariants` | 8.09 | `ruff` | 7.56 |
-| `render` | 0（本机专用，复用） | | |
+| `pytest` | 1135.26 | `contrast` | 124.56 |
+| `pytest_chain` | 764.90 | `style` | 124.45 |
+| `ui_flow` | 731.07 | `check_layers_selftest` | 124.26 |
+| `web_live` | 138.63 | `skills_claims` | 124.24 |
+| `acceptance` | 136.58 | `contract_doc_table` | 51.96 |
+| `audit` | 136.37 | `mypy` | 51.15 |
+| `check_layers` | 130.01 | `docs` | 43.51 |
+| `lf1_live` | 125.46 | `audit_titles` | 7.82 |
+| `proxy` | 125.37 | `invariants` | 7.28 |
+| `ui_dom_probe` | 125.06 | `ruff` | 6.99 |
+| `commands` | 124.96 | `render` | 0（本机专用，`EXCLUDED`） |
+| `ui_text` | 124.70 | | |
 
-同源求和 **4603.51 s ≈ 76.7 min**；job 从起跑到结束 **1343 s ≈ 22.4 min**（源：GitHub Actions job 接口的
-`started_at 2026-11-19T14:45:18Z` / `completed_at 2026-11-19T15:07:41Z`）—— 逐门 `seconds` 是**墙钟相加**，
-4 worker 并行下远大于总时长，别拿它当 SLA。两趟差这么多是 **runner 负载差**，不是判据变严：
-同一套门、同一份 `run_gates.py`，`pytest` 这一道从 821.79 s 涨到 1256.27 s。
+同源求和 **4464.59 s ≈ 74.4 min**；job 从起跑到结束 **1217 s ≈ 20.3 min**（源：GitHub Actions job 接口的
+`started_at 2026-11-20T22:36:55Z` / `completed_at 2026-11-20T22:57:12Z`）—— 逐门 `seconds` 是**墙钟相加**，
+4 worker 并行下远大于总时长，别拿它当 SLA。
+
+前一晚（2026-11-19）真跑过两趟：job `135331686931`（run `44456198821`，head `cdb2c0fa`，886 s）与
+job `135640738507`（run `44547171433`，head `14220c7c`，1343 s），同为 23 门全绿；那两趟的 `pytest` 分别
+821.79 s / 1256.27 s，同源求和 4603.51 s。三趟之间差这么多是 **runner 负载差**，不是判据变严 ——
+同一套门、同一份 `run_gates.py`。
+
+再往前 head `1e815a96` 那趟（job `136403301980`）是 22 绿 1 红：唯一红门
+`tests/test_pool_limits_data.py::test_limits_path_is_the_one_we_document`（判据把「宿主机绝对路径」写死成
+本机那一条，runner 上必然不等），已由卡 E148（`T-AG681`）改成位址规则修掉 —— 上表这趟就是修完之后跑的。
 
 ## 7. 已知边界 / 债
 
@@ -228,7 +237,7 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo openmaic    --stage al
 同一 HEAD 上分别用**改动前**的构建器与**改动后**的骨架各造一棵快照，再逐行比：
 
 ```
-git ls-tree -r HEAD  # 两边各 2786 条
+git ls-tree -r HEAD  # 两边各 2793 条
 only old 0 / only new 0
 ```
 

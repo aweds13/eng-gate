@@ -12,6 +12,12 @@
 - 新建 tests/test_pool_route_wiring.py（七条钉子）：不给 turns 只有 usage 重排、同一份 turns 连传才轮换、派活器 sink 里零 speed 族常量、网关认七个名字与 speed 别名、apply_strategy 生产调用点恰一处且 state 只由调用方持有的 turns 包出、六个喂料字段在座位构造里零出现、route.py 零写盘。
 - 新建 docs/decisions/0012-route-strategies-wiring.md：把「七种策略判据全带、接线只到 used、fast / speed 只许停在判据层不许接进派活链」写成成文条款，并用 AST 断言钉住。
 - 产品码零改动：tools/pool/route.py 与 tools/pool/gateway.py 逐字节不变，既有 171 条判据（网关 108 + 策略 63）一条不改、一条不红。
+## 2026-11-21 T-AG682 GHA 门禁读数回写：23 门全绿的现场与两份文档的旧口径
+
+- `docs/subsystems/ci/GitHub-Actions-云门禁.md` §6 换成 head `190903a0`（job `136613578025` / run `44830398970`）那趟：`ok=True host=runnervmbpeip rev=190903a0 n_gates=23 not_run=[]`、红门 0 个、`render` 唯一 `EXCLUDED`；逐门耗时表与求和 4464.59 s / 墙钟 1217 s 全部按该趟日志重算，旧两趟降级为对照并保留。
+- §8.2 判据「engineering 逐字不变」的条数从 2786 改成 **2793**（源：E146 落地时那两趟同 HEAD 快照的对比）。
+- `复盘/交接.d/T-AG680.md` 的「22 绿 1 红」原句后加补注行（卡 E149 / `T-AG682`、2026-11-21），说明该红门已由 E148 修掉、修完 23 门全绿；汇总文件由 `tools/sync_docs.py` 生成，未手改。
+- 读数：卡树 `check_docs.py --mode report` ⇒ 死指针 147（基线 147，+0）；`check_layers.py` ⇒ PASS；`check_derived_docs.py --check` ⇒ 双 OK。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

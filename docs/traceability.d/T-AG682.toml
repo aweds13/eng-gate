@@ -1,0 +1,10 @@
+[entries."T-AG682"]
+id = "T-AG682"
+title = "GHA门禁读数回写"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "- 卡 E146 交接块里那句「22 绿 1 红」按文档分层保留原文 + 加注（不改写），代价是同一段文字里并存两个时点的结论，读者要读到第二行才知道它已失效。原文与补注同在 `复盘/交接.d/T-AG680.md`。- `docs/subsystems/ci/GitHub-Actions-云门禁.md` §6 的逐门耗时表是**某一趟**的读数，runner 负载差会让同一道门在 822 s 与 1256 s 之间摆动（三趟实测），所以它只能当量级参考、不能当 SLA —— 这一点靠表下的说明，不靠数字本身。- 本轮那趟的 `render` 仍是 `EXCLUDED`（金样本采集自主机 DEV-HOST），见 `docs/subsystems/ci/GitHub-Actions-云门禁.md` §6 的 render 行。「23 门全绿」的口径是「22 门 exit=0 + 1 门 EXCLUDED」，不是「23 门都真跑过」。"
+
