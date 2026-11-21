@@ -141,25 +141,38 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage al
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
 补丁打不上 / 树陈旧），这套是「造快照」的失败面。两张表各自钉在自己的测试里，别混着记。
 
-## 6. 真读数（最近一趟 2026-11-21：23 门全绿；同一 head 的第一次是 22 绿 1 红）
+## 6. 真读数（最近一趟 2026-11-21：23 门全绿；同一 head 的前两趟各红 1 门）
 
-镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136757280859`（run `44871996999`，head `ce93720e`，
-`run_attempt=2`）。这一趟是**仓里这份 profile 骨架**自己跑出来的：`scripts/cloud/gha/build_snapshot.py` 带
-`--repo engineering --stage all` 从源树造快照、提交成 `ce93720e`、推 `main`，再由镜像仓那个冻结的
-`Windows HKCU autostart E2E` 作业执行。读数：23 门、`not_run` 空、**红门 0 个**；`render` 是唯一 `EXCLUDED`
-（金样本采集自主机 `DEV-HOST`，runner 上不跑，**不算红**）。
+镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136874445171`（run `44908327988`，head `3a5bc8cc`，
+`run_attempt=3`）。这一趟是**仓里这份 profile 骨架**自己跑出来的：`scripts/cloud/gha/build_snapshot.py`
+带 `--repo engineering --stage all` 从源树造快照、提交成 `3a5bc8cc`、推 `main`，再由镜像仓那个冻结的
+`Windows HKCU autostart E2E` 作业执行。读数：23 门、`not_run` 空、**红门 0 个**；`render` 是唯一
+`EXCLUDED`（金样本采集自主机 `DEV-HOST`，runner 上不跑，**不算红**）。
 
-★ **同一个 head 的第一次（job `136748365260`，`run_attempt=1`）不是全绿**：红门 1 个 —— `web_live`，
-`summary` 原文 `[FAIL] 真机自检没跑完：PUT http://127.0.0.1:56390/api/settings/ai`。
-重跑**同一个环境、同一个 head** 就绿了（就是上面这一趟）⇒ 那是 `web_live` 起的那套本机服务在
-连接层抖了一下，**不是稳定红**，也不是判据变严。两趟都写在这里，是因为只写绿的那趟会让人以为
-「这棵树一次就绿」（下次复现不出来就会怀疑判据），只写红的那趟会让人以为门禁坏了。
+★ **同一个 head 的前两趟不是全绿**，都是红 1 门、都是 `web_live`：
 
-读数原文（源：job `136757280859` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
+| attempt | job | 结论 | 红门原文 | 逐门秒求和 |
+|---|---|---|---|---|
+| 1 | `136858575740` | 红 | `web_live` exit=1，`summary` 原文 `[FAIL] 真机自检没跑完：PUT http://127.0.0.1:50106/api/settings/ai` | 4981.41 s |
+| 2 | `136864527180` | 红 | 同上形状，端口换成 `:63080` | 5152.77 s |
+| 3 | `136874445171` | 绿 | ——（`render` 唯一 `EXCLUDED`） | 3948.95 s |
+
+三趟是**同一个 head、同一个 runner（`runnervmbpeip`）、同一个 python（3.12.10）**，第三趟就绿了
+⇒ 那是 `web_live` 起的那套本机服务在连接层抖了一下，**不是稳定红**，也不是判据变严。三趟都写在这里，
+是因为只写绿的那趟会让人以为「这棵树一次就绿」（下次复现不出来就会怀疑判据），只写红的那趟会让人
+以为门禁坏了。
+
+★ 更要紧的是**红的那两趟里 `web_live` 的 `status` 是 `None`**，不是 `SUSPECT`：这类红本该被
+`scripts/run_gates.py` 的 `mark_suspect_rows()` 标成「等不到东西，不像断言不符」，实际上一次都没标上。
+根因和修法见卡 E152（`T-AG687`）：症状行（`没等到` / `timed out`）打在第 3 行，被后面 61 条 `[OK ]`
+挤出 `detail` 的尾部 20 行窗口，而 `mark_suspect_rows()` 只读 `summary` + `detail`。**这条修的是
+「症状看不见」，不是 `web_live` 本身** —— `web_live` 抖不抖，这趟读数说不了。
+
+读数原文（源：job `136874445171` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
 本机落盘在 gates/enggate-logs 下，不进仓）：
 
 ```
-ok=True  host=runnervmbpeip  rev=ce93720e  branch=main  n_gates=23  not_run=[]  at=2026-11-21T06:35:25
+ok=True  host=runnervmbpeip  rev=3a5bc8cc  branch=main  n_gates=23  not_run=[]  at=2026-11-21T14:40:22
 py=3.12.10  workers=4
 ```
 
@@ -167,40 +180,45 @@ py=3.12.10  workers=4
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
-| `pytest` | 970.46 | `commands` | 90.95 |
-| `ui_flow` | 661.97 | `ui_text` | 90.57 |
-| `pytest_chain` | 624.26 | `style` | 90.45 |
-| `check_layers_selftest` | 114.32 | `contrast` | 89.94 |
-| `audit` | 113.01 | `skills_claims` | 89.64 |
-| `acceptance` | 111.41 | `proxy` | 91.50 |
-| `web_live` | 108.28 | `lf1_live` | 91.85 |
-| `check_layers` | 107.24 | `ui_dom_probe` | 91.25 |
-| `contract_doc_table` | 38.79 | `mypy` | 38.37 |
-| `docs` | 34.12 | `audit_titles` | 7.33 |
-| `invariants` | 6.83 | `ruff` | 6.60 |
+| `pytest` | 989.19 | `proxy` | 109.29 |
+| `ui_flow` | 693.76 | `lf1_live` | 109.56 |
+| `pytest_chain` | 655.94 | `ui_dom_probe` | 108.98 |
+| `check_layers_selftest` | 122.98 | `commands` | 108.60 |
+| `web_live` | 121.67 | `ui_text` | 108.36 |
+| `audit` | 120.93 | `style` | 108.22 |
+| `acceptance` | 117.89 | `contrast` | 107.88 |
+| `check_layers` | 109.46 | `skills_claims` | 107.50 |
+| `contract_doc_table` | 44.19 | `mypy` | 43.98 |
+| `docs` | 39.24 | `audit_titles` | 7.41 |
+| `invariants` | 7.09 | `ruff` | 6.83 |
 | `render` | 0（本机专用，`EXCLUDED`） | | |
 
-同源求和 **3669.14 s ≈ 61.2 min**；job 从起跑到结束 **1046 s ≈ 17.4 min**（源：GitHub Actions job 接口的
-`started_at 2026-11-21T06:18:05Z` / `completed_at 2026-11-21T06:35:31Z`）—— 逐门 `seconds` 是**墙钟相加**，
+同源求和 **3948.95 s ≈ 65.8 min**；job 从起跑到结束 **1059 s ≈ 17.7 min**（源：GitHub Actions job 接口的
+`started_at 2026-11-21T14:22:49Z` / `completed_at 2026-11-21T14:40:28Z`）—— 逐门 `seconds` 是**墙钟相加**，
 4 worker 并行下远大于总时长，别拿它当 SLA。
 
 两处要看清楚，别把这张表读成「每门都判完了」：
 
 - `docs` 那门的 `summary` 原文是 `CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS`，`exit_code=0` 只说明
   它没超基线；「判不出」的那批条目在 runner 上照样判不出。
-- `pytest` 那门的 `summary` 原文是 `5489 passed, 5 skipped, 2 xfailed, 4 warnings in 964.14s`，
+- `pytest` 那门的 `summary` 原文是 `5498 passed, 5 skipped, 2 xfailed, 4 warnings in 982.97s`，
   与更早几趟的数字不同属正常（树在变），能比的是「红门 0 个」这一条。
 
-往前数，profile 骨架落地后还有两趟全绿：job `136685943795`（run `44852205296`，head `97d009e5`，
-`pytest` 938.20 s、同源求和 3536.7 s、job 1015 s）与 job `136613578025`（run `44830398970`，head
-`190903a0`，`pytest` 1135.26 s、同源求和 4464.59 s、job 1217 s）。三趟连着全绿（其中一趟是重跑），
-说明绿的那几趟不是侥幸 —— **同时**说明同一份判据的墙钟在 runner 上会在 1015～1046 s 之间摆，
-拿单趟的秒数当性能基线会得出错误结论。
+### 6.1 往前数（降级成对照，全部保留）
 
-再往前，2026-11-19 真跑过两趟：job `135331686931`（run `44456198821`，head `cdb2c0fa`，886 s）与
+上一趟全绿是 job `136757280859`（run `44871996999`，head `ce93720e`，`run_attempt=2`）：23 门全绿、
+逐门秒求和 3669.14 s、job 1046 s（`started_at 06:18:05Z` / `completed_at 06:35:31Z`）；同一 head 的
+attempt 1（job `136748365260`）同样红在 `web_live`（`PUT http://127.0.0.1:56390/api/settings/ai`）。
+
+再往前三趟全绿：job `136685943795`（run `44852205296`，head `97d009e5`，`pytest` 938.20 s、同源求和
+3536.7 s、job 1015 s）与 job `136613578025`（run `44830398970`，head `190903a0`，`pytest` 1135.26 s、
+同源求和 4464.59 s、job 1217 s）。说明绿的那几趟不是侥幸 —— **同时**说明同一份判据的墙钟在 runner 上
+会在 1015～1217 s 之间摆，拿单趟的秒数当性能基线会得出错误结论。
+
+2026-11-19 还真跑过两趟：job `135331686931`（run `44456198821`，head `cdb2c0fa`，886 s）与
 job `135640738507`（run `44547171433`，head `14220c7c`，1343 s），同为 23 门全绿；那两趟的 `pytest` 分别
-821.79 s / 1256.27 s，同源求和 4603.51 s。四趟之间差这么多是 **runner 负载差**，不是判据变严 ——
-同一套门、同一份 `run_gates.py`。
+821.79 s / 1256.27 s，同源求和 4603.51 s。六趟之间差这么多是 **runner 负载差**，不是判据变严 ——
+同一套门、同一份 `scripts/run_gates.py`。
 
 最早 head `1e815a96` 那趟（job `136403301980`）是 22 绿 1 红：唯一红门
 `tests/test_pool_limits_data.py::test_limits_path_is_the_one_we_document`（判据把「宿主机绝对路径」写死成
@@ -308,7 +326,7 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
 
 | 镜像仓 | 可见性 | 源仓 | 跑什么 | 最近那趟（head / run / 作业） | 读数 |
 |---|---|---|---|---|---|
-| `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `ce93720e` / run `44871996999`（attempt 2）/ `Windows HKCU autostart E2E` `136757280859` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 3669.14 s（§6） |
+| `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `3a5bc8cc` / run `44908327988`（attempt 3）/ `Windows HKCU autostart E2E` `136874445171` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 3948.95 s（§6） |
 | `aweds13/om-gate` | **public** | `OpenMAIC` | 它自己 `ci.yml` 的 `unit` 四片 `vitest run --shard=N/4` | `92f3c6fe` / run `44753382083` / `Unit Tests (N/4)` × 4 | 用例 64 failed / 14727 passed / 448 skipped，四片相加 ≈ 717.7 s（§8.3） |
 | `aweds13/fw-gate` | private | `framework` | 那棵树自己的 `pytest`（适配器打 JSON） | `f31972d7` / run `44892725961` / `136811824353` | `{"ok": true, "returncode": 0, "suite": "tests", "passed": 55, "failed": 0}`，作业 25 s |
 | `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run`（不分片） | `9bbc4a0a` / run `44896327615` / `136822660424` | `ok=false`：44 个用例文件、1 条 FAIL（下面第 3 条），vitest 段 241.3 s |

@@ -1,3 +1,9 @@
+## 2026-11-22 T-AG687 症状行不许被 61 条 [OK ] 挤掉：detail 兜底 + 收口重打保留 ★
+- `scripts/run_gates.py`：新增 `_symptom_line()`，`gate_detail()` 在尾部窗口里没有 `SUSPECT_SHAPES` 命中时，从**全文**倒序捞最近一条症状行补到 `detail` 最前面；体积口径一个字没放宽（仍 ≤ 2000 字 / ≤ 20 行）。
+- `tools/web_live_check.py`：症状原文按名字记进旁路表（`mark_live_error()` / `live_lan_checks()` 各加可选第三参，默认 `None` ⇒ 既有调用点一字不改），收口抽成 `print_checks()`，`[FAIL] 名字` 后补回 `  ★ 症状原文`；名字形状没改。
+- 根因：症状打在第 3 行、后面 61 条 `[OK ]` 子检查，收口又重打不带症状的同名 FAIL 行 ⇒ `mark_suspect_rows()` 读的 `summary + detail` 两处都没有「没等到」⇒ `SUSPECT` 在门级红上从未生效（三趟读数 `status` 全 `None`）。
+- 两条新钉子都是「改之前必红」：`tests/test_gate_summary_truthful.py`（1 条症状 + 60 条 `[OK ]` + 末行 `FAILED`）与 `tests/test_web_live_timeout.py`（旧代码连第三参都收不了，直接 `TypeError`）。
+- 文档 `docs/subsystems/ci/GitHub-Actions-云门禁.md`：§6 换成 head `3a5bc8cc` 的三趟、§9 eng-gate 行跟着换；旧读数全部降级成 §6.1 对照，一条没删。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

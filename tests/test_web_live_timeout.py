@@ -175,3 +175,38 @@ def test_a_failed_check_makes_the_whole_gate_red():
     err = wlc.LiveCallError("PUT", "http://x/api/settings/ai", 10.0, TimeoutError("timed out"))
     wlc.mark_live_error(checks, err)
     assert all(checks.values()) is False
+
+
+def test_star_symptom_survives_the_final_rerun(capsys):
+    """★ 卡 E152：收口重打那一轮，False 行必须继续带 ★ 与症状原文。
+
+    现场：症状只打在 `mark_live_error()` 那一行（带 ★），主流程收口又把所有 check 名字重打一遍；
+    旧写法只打名字 ⇒ `detail` 取的尾部只剩「配对失败」的名字，看不出是「等不到」，
+    `mark_suspect_rows()` 于是永远标不上 `SUSPECT`（GHA 上三趟读数的 status 全是 None）。
+    """
+    checks: dict[str, bool] = {"页面能挂载": True}
+    symptoms: dict[str, str] = {}
+    err = wlc.LiveCallError("PUT", "http://x/api/settings/ai", 60.0, TimeoutError("timed out"))
+    wlc.mark_live_error(checks, err, symptoms)
+    capsys.readouterr()          # 第一轮（带 ★ 那行）不算，只看收口那一轮
+    wlc.print_checks(checks, symptoms)
+
+    out = capsys.readouterr().out
+    fail_lines = [ln for ln in out.splitlines() if ln.startswith("[FAIL]")]
+    assert len(fail_lines) == 1, f"收口该只打一行 FAIL：{fail_lines!r}"
+    # 名字形状一个字不许改（既有 startswith 断言都认这个前缀）。
+    head = fail_lines[0].split("  ")[0]
+    assert head.startswith("[FAIL] 真机自检没跑完：PUT "), f"名字形状变了：{head!r}"
+    assert "/api/settings/ai" in fail_lines[0]
+    # 症状必须补回来：★ 与「没等到」两个都在。
+    assert "★" in fail_lines[0], f"收口把 ★ 洗掉了：{fail_lines[0]!r}"
+    assert "没等到" in fail_lines[0], f"症状原文没补回来：{fail_lines[0]!r}"
+    assert "[OK ] 页面能挂载" in out, "绿行形状也被改坏了"
+
+
+def test_fail_without_symptom_keeps_the_bare_name(capsys):
+    """**反例**：没有症状的 False 行不许凭空长出 ★（那会让「断言不符」冒充「等不到」）。"""
+    checks = {"页面能挂载": False}
+    wlc.print_checks(checks)
+    out = capsys.readouterr().out
+    assert out == "[FAIL] 页面能挂载" + "\n", f"形状变了：{out!r}"

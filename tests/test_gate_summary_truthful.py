@@ -216,3 +216,40 @@ def test_not_run_gate_row_does_not_carry_detail():
     row = _run_fake("not_run_door", code)
     assert row["exit_code"] == 3
     assert row.get("detail") == "", f"NOT RUN 不该有 detail：{row.get('detail')!r}"
+
+def test_detail_keeps_the_symptom_outside_the_tail_window():
+    """★ 卡 E152：症状行被几十条 `[OK ]` 挤出尾部窗口时，`detail` 仍必须带上它。
+
+    现场形状照 GHA 上 head `3a5bc8cc` 那两趟红门摆：症状（`没等到` / `timed out`）打在最前面，
+    接着 60 条 `[OK ]` 子检查，末行才是那条**不带症状**的 `[FAIL]`（收口重打的同名行）。
+    尾部 20 行窗口里一条症状都没有 ⇒ 旧口径下 `mark_suspect_rows()` 永远标不上 `SUSPECT`。
+    """
+    symptom = (
+        "[FAIL] 真机自检没跑完：PUT http://127.0.0.1:1/api/settings/ai  ★ PUT 等了 60 秒没等到"
+        "（TimeoutError: timed out）"
+    )
+    lines = ["import sys", f"print({symptom!r})"]
+    lines += [f"print('[OK ] 子检查 {i}')" for i in range(60)]
+    lines += [
+        "print('[FAIL] 真机自检没跑完：PUT http://127.0.0.1:1/api/settings/ai')",
+        "sys.exit(1)",
+    ]
+    row = _run_fake("web_live", "\n".join(lines))
+    assert row["exit_code"] == 1
+
+    # 前提成立：尾部窗口里没有症状，所以摘要也挑不到它。
+    summary = str(row["summary"])
+    assert not any(s in summary for s in rg.SUSPECT_SHAPES), f"摘要自己就带了症状：{summary!r}"
+
+    detail = str(row.get("detail") or "")
+    assert "没等到" in detail, f"症状没进 detail，SUSPECT 判据会整条失明：{detail[:300]!r}"
+    assert detail.splitlines()[0] == symptom, f"症状行不在最前面，随时会被截掉：{detail[:200]!r}"
+    # 体积口径一个字没放宽。
+    assert len(detail) <= rg.DETAIL_MAX_CHARS, f"字符数超了：{len(detail)}"
+    lines_used = detail.count(chr(10)) + 1
+    assert len(detail.splitlines()) <= rg.DETAIL_TAIL_LINES, f"行数超了：{lines_used}"
+
+    rows = [row]
+    rg.mark_suspect_rows(rows, {"co": "占 cpu 的同行"})
+    assert rows[0].get("status") == "SUSPECT", f"还是没标上 SUSPECT：{rows[0]!r}"
+    assert rg.gates_ok(rows) is False, "SUSPECT 只标注症状，红还是红"

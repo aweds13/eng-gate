@@ -246,13 +246,21 @@ def _read_broken(exc: BaseException) -> bool:
     return getattr(exc, "errno", None) not in NO_ROUTE_ERRNOS
 
 
-def mark_live_error(checks: dict[str, bool], err: LiveCallError) -> None:
+def mark_live_error(
+    checks: dict[str, bool], err: LiveCallError, symptoms: dict[str, str] | None = None
+) -> None:
     """把「没等到」记成一条 FAIL（卡 E67）：**不许洗成通过**，也不许把整趟带崩。
 
     名字里带方法与 endpoint，排障时一眼看出断在哪一处。
+
+    ★ 卡 E152：顺手把症状原文按名字记进 `symptoms`。收口会**再重打一遍**所有 check 名字，
+    那一轮原来只打名字 ⇒ 带 ★ 的行留在前面，而 `detail` 取的尾部只剩不带症状的同名 FAIL 行，
+    `mark_suspect_rows()` 于是看不见「没等到」，红门永远标不上 `SUSPECT`。
     """
     name = f"真机自检没跑完：{err.method} {err.url}"
     checks[name] = False
+    if symptoms is not None:
+        symptoms[name] = str(err)
     print(f"[FAIL] {name}  ★ {err}")
 
 
@@ -978,7 +986,9 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
-def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
+def live_lan_checks(
+    tmp: Path, port: int | None = None, symptoms: dict[str, str] | None = None
+) -> dict[str, bool]:
     """T-G10b 真机自检：**真起一个绑 0.0.0.0 的服务**，再从本机的**局域网地址**访问它。
 
     本环境没有第二台设备，所以拿"本机局域网 IP"当"别人" —— 这已经够了：
@@ -1092,11 +1102,29 @@ def live_lan_checks(tmp: Path, port: int | None = None) -> dict[str, bool]:
     except LiveCallError as err:   # ★ 卡 E71：已经算出来的那一串一条都不许丢
         name = f"局域网：有一步没等到（{err.method} {err.url}）"
         checks[name] = False
+        if symptoms is not None:   # ★ 卡 E152：同上 —— 收口重打时要把症状带回来
+            symptoms[name] = str(err)
         print(f"[FAIL] {name}  ★ {err}")
     finally:
         server.should_exit = True
         thread.join(timeout=10)
     return checks
+
+
+def print_checks(checks: dict[str, bool], symptoms: dict[str, str] | None = None) -> None:
+    """收口：把每条 check 的结论打一行（卡 E152）。
+
+    ★ 名字形状一个字不许改（`[OK ] 名字` / `[FAIL] 名字`）—— tests/test_gate_selfproof_product.py
+    与 tests/test_web_live_lan_timeout.py 的断言都认这个前缀。False 的那行把症状原文补回来：
+    不带它，detail 的尾部就只剩「配对失败」的名字，看不出是「等不到」。
+    """
+    marks = symptoms or {}
+    for name, passed in checks.items():
+        if passed:
+            print(f"[OK ] {name}")
+        else:
+            star = marks.get(name)
+            print(f"[FAIL] {name}" + (f"  ★ {star}" if star else ""))
 
 
 def main() -> int:
@@ -1187,6 +1215,8 @@ def main() -> int:
         print(f"[提示] 以下 data-view 既不是视图也没注册动作：{unknown}")
     # ★ 卡 E67：这一串里任何一次「没等到」都记一条 FAIL（点名 + 耗时），
     # 不许抛穿成裸 traceback，更不许洗成通过。
+    # ★ 卡 E152：症状原文按名字存一份，收口重打时补回 False 行（见 `print_checks`）。
+    symptoms: dict[str, str] = {}
     try:
         checks.update(live_attach_checks(base, tmp))
         checks.update(live_remind_checks(base))
@@ -1200,11 +1230,10 @@ def main() -> int:
         checks.update(live_phone_view_checks(base))
         checks.update(live_sync_checks(base, tmp))
         checks.update(live_offline_checks(base, tmp))
-        checks.update(live_lan_checks(tmp))
+        checks.update(live_lan_checks(tmp, None, symptoms))
     except LiveCallError as err:
-        mark_live_error(checks, err)
-    for name, passed in checks.items():
-        print(f"[{'OK ' if passed else 'FAIL'}] {name}")
+        mark_live_error(checks, err, symptoms)
+    print_checks(checks, symptoms)
     server.should_exit = True
     thread.join(timeout=10)
     # ★ 卡 E59：`"unverified"` → 退出码 3（`scripts/run_gates.py:1416` 把 3 记成 `not_run`，

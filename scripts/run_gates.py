@@ -827,14 +827,46 @@ DETAIL_TAIL_LINES = 20
 DETAIL_MAX_CHARS = 2000
 
 
+def _symptom_line(lines: list[str]) -> str:
+    """从**全文**里倒着找最近一条「等不到东西」的症状行（卡 E152）。
+
+    ★ 为什么不能只信尾部：web_live 真跑时会先打一条带症状的 `[FAIL] … ★ … 没等到`（第 3 行），
+    接着几十条 `[OK ]` 子检查，收口时又重打一遍**不带症状**的同名 FAIL 行。尾部
+    `DETAIL_TAIL_LINES` 行全被 `[OK ]` 占满 ⇒ 症状一条都进不来，而 `mark_suspect_rows()` 只读
+    `summary` + `detail` ⇒ `SUSPECT` 永远标不上（GHA 上 head `3a5bc8cc` 的三趟读数里
+    `web_live` 的 `status` 全是 `None`）。
+    """
+    for ln in reversed(lines):
+        low = ln.lower()
+        if any(shape.lower() in low for shape in SUSPECT_SHAPES):
+            return ln
+    return ""
+
+
 def gate_detail(out: str) -> str:
     """输出尾部若干行（给条目里的 `detail` 用）。
 
-    末 `DETAIL_TAIL_LINES` 行、上限 `DETAIL_MAX_CHARS` 字 —— 原始 traceback 与
-    「timed out / 超时」这类症状行都在尾部，前面的进度日志留着只是撑大入库产物。
+    末 `DETAIL_TAIL_LINES` 行、上限 `DETAIL_MAX_CHARS` 字 —— 原始 traceback 在前几条，尾部是
+    收口的进度日志。★ 卡 E152：症状行**不在**尾部窗口里时，把它补到最前面一行，否则
+    `mark_suspect_rows()` 看不见「等不到」，红门永远标不上 `SUSPECT`。
+    体积口径一个字没放宽：仍是 ≤ `DETAIL_TAIL_LINES` 行 / ≤ `DETAIL_MAX_CHARS` 字 —— 补一行就从尾部
+    让出一行；超长时症状行先占位，尾部按剩余额度截。
     """
-    tail = [ln.rstrip() for ln in (out or "").splitlines() if ln.strip()]
-    return "\n".join(tail[-DETAIL_TAIL_LINES:])[-DETAIL_MAX_CHARS:]
+    lines = [ln.rstrip() for ln in (out or "").splitlines() if ln.strip()]
+    window = lines[-DETAIL_TAIL_LINES:]
+    symptom = _symptom_line(lines)
+    if symptom and symptom not in window:
+        window = [symptom, *window[-(DETAIL_TAIL_LINES - 1):]]
+    text = "\n".join(window)
+    if len(text) <= DETAIL_MAX_CHARS:
+        return text
+    if window and window[0] == symptom:
+        room = DETAIL_MAX_CHARS - len(symptom) - 1
+        if room <= 0:
+            return symptom[:DETAIL_MAX_CHARS]
+        body = "\n".join(window[1:])[-room:]
+        return f"{symptom}\n{body}" if body else symptom
+    return text[-DETAIL_MAX_CHARS:]
 
 
 #: 卡 E72：红门要不要对每条红 nodeid 做隔离复核（默认关 —— 开了会真起 pytest 子进程）。
