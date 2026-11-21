@@ -13107,3 +13107,13 @@ evidence = [
   "file:复盘/收口后待用户清单.md",
 ]
 gaps = "- 清单新增的一栏（GitHub 权限层）只是**现状投影**：三条都卡在 token scope / 网页操作，机器侧没有自动解法，scope 一刷新这段就该删掉 —— 别留成永久欠账。判据面见 `tools/pool/limits.py` 之外的 `gh auth status`（仓外命令，无仓内真源），所以本页只能如实写「要你去点一下」。- GHA 文档 §6 换成了最新那趟（run 44930214907 / job 136924983162），但那一趟 `web_live` 是绿的 ⇒ 卡 E152 的症状兜底**在真 runner 上仍未被触发过**，证据只有仓内两条钉子 `tests/test_gate_summary_truthful.py` 与 `tests/test_web_live_timeout.py`；下一趟 `web_live` 真红才算现场验证。- §9 五仓表里除 eng-gate 外的四行仍是 2026-11-21 的读数，本轮没重取（不在这张卡的交付面）：`docs/subsystems/ci/GitHub-Actions-云门禁.md` §9。- 本卡只写文书，`scripts/` `tools/` `tests/` 一行未动；三道文档门读数：死指针 147（基线 147，+0）/ LAYER PASS / 派生文档双 OK，真源 `scripts/check_docs.py` 与 `docs/doc-debt-baseline.toml`。"
+
+[entries."T-AG689"]
+id = "T-AG689"
+title = "探针仓已归档、噪声workflow四仓口径回写"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:复盘/收口后待用户清单.md",
+]
+gaps = "- 归档不是删除：四个仓还在账号里，只是变成只读、从活跃列表退出。清单 G-1 行已改成「机器侧已归档、只剩删」，但「真消失」仍要 `delete_repo` scope，仓内没有能自助的判据 —— 真源是仓外命令现读（`gh api repos/aweds13/<仓>`），本页只能如实写「要你去点一下」。判据面见 `复盘/收口后待用户清单.md`。- 噪声 workflow 的「四仓」口径（2026-11-22 现读：四仓各 total 10 / active 1 / disabled 9）会随新建仓 / 新增 workflow 漂；仓外真源是 `gh api repos/aweds13/<仓>/actions/workflows`，仓内只该留口径、别留死数 —— 现在这段写在 `复盘/收口后待用户清单.md` 的「已经不需要你做的」那句里。- `om-gate` 的 8 份 active 是它原树带的，本轮只读没动 —— 它不在「噪声 workflow」那一类里，判据见 `docs/subsystems/ci/GitHub-Actions-云门禁.md` §9 第 2 条。- 本卡只写文书，`scripts/` `tools/` `tests/` 一行未动；三道文档门读数：死指针 147（基线 147，+0）/ LAYER PASS / 派生文档双 OK，真源 `scripts/check_docs.py` 与 `docs/doc-debt-baseline.toml`。"
