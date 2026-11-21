@@ -8,6 +8,10 @@
 - tests/test_pool_limits_data.py：判据 1 从「逐字等于本机绝对路径」改成「钉规则」—— 隔离根有 infra/pool/ 时位址 = 该目录下的 limits.toml、没有时回落 TOOL_ROOT 下的同路径，尾段恒为 POOL_ANCHOR + LIMITS_NAME，与 cwd 和盘符都无关（卡 E148）。
 - 反向实验：把 limits_path() 的第三段临时改成写死仓外绝对路径 ⇒ 新判据立刻红（AssertionError 原文见卡规格），还原后 sha256 与基线一致。
 - 卡 A367 规格判据 1 一节加注「已被卡 E148 改写」，保留原文不动（历史口径不静默改写）；生产代码一行未改。
+## 2026-11-21 T-AG678 F17 七种路由策略：判据层全带、接线只到 used，speed 红线有了机检面
+- 新建 tests/test_pool_route_wiring.py（七条钉子）：不给 turns 只有 usage 重排、同一份 turns 连传才轮换、派活器 sink 里零 speed 族常量、网关认七个名字与 speed 别名、apply_strategy 生产调用点恰一处且 state 只由调用方持有的 turns 包出、六个喂料字段在座位构造里零出现、route.py 零写盘。
+- 新建 docs/decisions/0012-route-strategies-wiring.md：把「七种策略判据全带、接线只到 used、fast / speed 只许停在判据层不许接进派活链」写成成文条款，并用 AST 断言钉住。
+- 产品码零改动：tools/pool/route.py 与 tools/pool/gateway.py 逐字节不变，既有 171 条判据（网关 108 + 策略 63）一条不改、一条不红。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

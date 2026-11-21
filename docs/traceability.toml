@@ -12921,3 +12921,18 @@ evidence = [
   "test:test_pool_lanes.py::test_only_two_queue_wait_mentions_in_repo",
 ]
 gaps = "1. 这张卡钉的是「不排队」这件事**不存在**：判据全是零命中扫描 + 签名白名单，能证明今天闸链上没有 sleep/线程/协程、没有 wait 形参，但证明不了「将来该不该有」。哪天有人真要排队，这组钉子只会红，不会告诉他该怎么判。指针 tests/test_pool_lanes.py2. 判据 5 放行了 `tools/pool/landing.py:2601` 的 merge_queue.wait_turn —— 同名不同物（落地合并队列），断言里写了理由但那是**文字口径**，将来 landing.py 真加了「按 key 等槽」也扫不出来。指针 tools/pool/landing.py3. `tools/pool/lanes.py` 一字节未改：越界必抛、不夹、上界常量全由 tests 侧覆盖 ⇒ 源码里没有一行能自证「不排队」，全靠测试文件。指针 tools/pool/lanes.py"
+
+[entries."T-AG678"]
+id = "T-AG678"
+title = "F17七种路由策略接线现状：判据全带接线只到used，speed红线有机器检查面"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_route_wiring.py",
+  "file:docs/decisions/0012-route-strategies-wiring.md",
+  "test:test_pool_route_wiring.py::test_without_turns_only_usage_reorders",
+  "test:test_pool_route_wiring.py::test_same_turns_rotates_the_starting_seat",
+  "test:test_pool_route_wiring.py::test_apply_strategy_has_one_call_site_and_caller_holds_turns",
+  "test:test_pool_route_wiring.py::test_route_module_never_writes_anything",
+]
+gaps = "1. 「七个策略的问题在输入形状、不在实现」这句是**判断**不是读数：七条钉子只证明「喂料下只有 usage 与 rotate 会动 / 六个喂料字段零构造 / route.py 不落盘」，从这三条到那个解释之间没有断言。指针 docs/decisions/0012-route-strategies-wiring.md2. 判据 1 只调进程内的 gateway._order(...)：没起过真服务、没真发过 HTTP、真派活（wb_dispatch 走号池）一次都没跑，所以「接上线会怎样」仍然只有进程内一层效果。指针 tests/test_pool_route_wiring.py3. 验收第三条的红是 docs/decisions/ 的编号空洞（缺 0011，属卡 A381），不是本卡那份 0012 的结构；本卡只用「拷到临时根」旁证结构通过，而那个临时根不是 git 仓 ⇒ 那里那条 skip 是判不出，不是绿。指针 docs/decisions/0012-route-strategies-wiring.md"
