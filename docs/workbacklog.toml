@@ -7150,3 +7150,29 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A392"
+task = "T-AG683"
+title = "F43读端接线：上报用量进只读读数面，零import钉子钉死不进派活链"
+tree = ".wt/A392"
+spec = "复盘/卡/卡A392-F43读端接线-只读读数面与零import钉子.md"
+files = [
+  "tools/pool/model_registry.py",
+  "tools/wb_dispatch.py",
+  "tools/pool/usage_ingest.py",
+  "tools/pipeline_view.py",
+  "tools/pool_mcp.py",
+  "tools/dsh_panel.py",
+  "tests/test_pool_usage_ingest.py",
+  "tests/test_pipeline_view_holds.py",
+  "tests/test_pipeline_view.py",
+  "tests/test_f43_read_face.py",
+  "docs/subsystems/pool/modules.toml",
+  "复盘/卡/卡A392-F43读端接线-只读读数面与零import钉子.md"
+]
+depends = [
+  "A375"
+]
+risk = "mid"
+status = "pending"
