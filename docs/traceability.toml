@@ -13045,3 +13045,19 @@ evidence = [
   "test:test_pool_nopin.py::test_adr_exists_and_passes_machine_check",
 ]
 gaps = "- 判据 2② 今天只能是「子集 + 必含 `tools/pool_mcp.py`」，不是卡规格字面的相等：`tools/pipeline_view.py` 至今零 import `usage_ingest`（A392 未落），按字面写必红且红的原因是隔壁卡。A392 落地后收紧成相等是一行改动，但必须有人去改。指针 `tests/test_pool_nopin.py`。- 白名单第二项是照 A392 卡规格钉的计划，不是照代码钉的事实：代码里 `pipeline_view` 还不消费 `merged_tokens`。指针 `docs/decisions/0013-nopin-not-wired.md`。- `reported_summary` 全仓不存在（`tools/pool/usage_ingest.py` 0 次、全仓 import 0 次），只作为禁名出现；ADR 把它写成九个名字里的第 9 个，而卡规格只列了 8 个。指针 `docs/decisions/0013-nopin-not-wired.md`。"
+
+[entries."T-AG686"]
+id = "T-AG686"
+title = "GHA五仓读数回写与骨架桩缺件"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "file:scripts/cloud/gha/build_snapshot.py",
+  "file:scripts/cloud/gha/gate_profile.py",
+  "file:scripts/cloud/gha/profiles/engineering.toml",
+  "test:test_gha_cloud_gate.py::test_rewrite_root_without_projects_in_need_is_rejected_at_load",
+  "test:test_gha_cloud_gate.py::test_every_profile_that_rewrites_root_lists_projects_toml",
+  "test:test_gha_cloud_gate.py::test_rewrite_projects_root_missing_file_is_pool_code_not_traceback",
+]
+gaps = "1. 「五仓都在跑」这句话里有一仓是**红的且是环境性红**（`dsh-gate` 的用例比 `statSync().mode & 0o777`，NTFS 上 `0o700`/`0o600` 落成 `438`）。文档 §9 第 3 条只写清「这是 Windows 语义不是代码坏」，没修它 —— 修法（换 Linux runner 或让源仓判据认平台）超出本卡，判据见 docs/subsystems/ci/GitHub-Actions-云门禁.md §9。2. 五仓的读数形状仍不统一（eng 是 23 门 JSON / fw、ura 是 `passed`+`failed` 的小 JSON / dsh 的 `passed`/`failed` **恒为 0** 没解析计数 / om 是 vitest 四段文本）。要收成一张表得各写提取器，判据在 docs/subsystems/ci/GitHub-Actions-云门禁.md §9 末段。3. 号池桩缺件这条只在 profile 加载与 `_rewrite_projects_root()` 两处兜住，**适配器自己现造桩那条路**（scripts/cloud/gha/adapter.py 的 `_ensure_pool_stub()`）没走这条校验；两条路是两份实现，可能各自漂。4. `[workflow].install` 这条键到今天仍**没有使用者**（写了没跑过）—— 本卡只保证 scripts/cloud/gha/gate_profile.py 的交叉校验不会放它跟 `from_remote_workflows` 同时开，没给它加活用例。"

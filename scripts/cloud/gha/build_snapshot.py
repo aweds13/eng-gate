@@ -207,6 +207,31 @@ def _require_text(dst, items):
     log("required text ok:", len(items))
 
 
+def _rewrite_projects_root(stub, dst):
+    """把仓外号池桩里 projects.toml 的 root 改写成这一趟的快照路径。
+
+    卡 E151：这一件是被改写 root 的那一份，读之前先判在不在 —— 否则缺件走的是裸
+    FileNotFoundError（退 1），而不是可读的 POOL_STUB_INCOMPLETE（退 6），
+    与 0/2/3/4/5/6 这张退出码表对不上（2026-11-21 真踩：删掉临时目录后重推，两趟都撞）。
+    """
+    projects_path = os.path.join(stub, "projects.toml")
+    if not os.path.isfile(projects_path):
+        log("POOL_STUB_INCOMPLETE", ["projects.toml"])
+        sys.exit(EXIT_POOL)
+    with open(projects_path, encoding="utf-8") as fh:
+        proj = fh.read()
+    dst_posix = dst.replace(os.sep, "/")
+    proj2 = re.sub(r'(?m)^root = "[^"]*"', 'root = "' + dst_posix + '"', proj)
+    # 桩是共享的：上一趟可能已经把 root 改成本趟的同一路径 ⇒ 判「改后是否等于 DST」
+    mroot = re.search(r'(?m)^root = "([^"]*)"', proj2)
+    if not mroot or mroot.group(1) != dst_posix:
+        log("PROJECT_ROOT_NOT_REWRITTEN", mroot.group(1) if mroot else None)
+        sys.exit(EXIT_POOL)
+    with open(projects_path, "w", encoding="utf-8", newline=chr(10)) as fh:
+        fh.write(proj2)
+    log("projects.toml root ->", dst_posix)
+
+
 def _exec_bits(root):
     """源仓里哪些文件是可执行的（tree 模式要把这几个位带回快照）。
 
@@ -352,19 +377,7 @@ def do_build(a):
             log("POOL_STUB_INCOMPLETE", miss)
             sys.exit(EXIT_POOL)
         if prof["pool"]["rewrite_root"]:
-            projects_path = os.path.join(stub, "projects.toml")
-            with open(projects_path, encoding="utf-8") as fh:
-                proj = fh.read()
-            dst_posix = dst.replace(os.sep, "/")
-            proj2 = re.sub(r'(?m)^root = "[^"]*"', 'root = "' + dst_posix + '"', proj)
-            # 桩是共享的：上一趟可能已经把 root 改成本趟的同一路径 ⇒ 判「改后是否等于 DST」
-            mroot = re.search(r'(?m)^root = "([^"]*)"', proj2)
-            if not mroot or mroot.group(1) != dst_posix:
-                log("PROJECT_ROOT_NOT_REWRITTEN", mroot.group(1) if mroot else None)
-                sys.exit(EXIT_POOL)
-            with open(projects_path, "w", encoding="utf-8", newline=chr(10)) as fh:
-                fh.write(proj2)
-            log("projects.toml root ->", dst_posix)
+            _rewrite_projects_root(stub, dst)
         if os.path.isdir(os.path.join(dst, "infra")):
             log("INFRA_INSIDE_SNAPSHOT")
             sys.exit(EXIT_POOL)

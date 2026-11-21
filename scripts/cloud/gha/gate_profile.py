@@ -253,6 +253,13 @@ def _cross_check(path, out):
         raise ProfileError(path.name + ": [pool].need 给了清单但 stub = false，没人会去造它")
     if out["pool"]["rewrite_root"] and not out["pool"]["stub"]:
         raise ProfileError(path.name + ": [pool].rewrite_root 只在 stub = true 时有意义")
+    if out["pool"]["rewrite_root"] and "projects.toml" not in out["pool"]["need"]:
+        # 卡 E151：rewrite_root 要读 projects.toml 改 root，而 need 只校验列在里面的件。
+        # 少列它的时候，缺件不是「桩不完整」（退 6）而是裸 FileNotFoundError（退 1）。
+        raise ProfileError(
+            path.name + ": [pool].rewrite_root = true 时 need 里必须有 projects.toml"
+            " —— 那是被改写 root 的那一件；不列进 need 就没人开跑前查它在不在，"
+            "缺件会变成裸 FileNotFoundError 而不是可读的 POOL_STUB_INCOMPLETE")
     if out["snapshot"]["ledger_exempt"] and not out["message"]:
         raise ProfileError(path.name + ": 要写台账豁免块就必须有 message")
     for item in out["smoke"]["env"]:

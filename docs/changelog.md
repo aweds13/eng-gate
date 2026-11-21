@@ -33,6 +33,12 @@
 - 新增 `docs/decisions/0013-nopin-not-wired.md`：speed.py / pricing.py / usage_ingest 三支不进派活链成文，列九个禁名与「库留着」的理由。
 - 变异照出一条真缺陷并已修：`_import_tails` 原先只收 `ImportFrom.module`，`from pool import speed` 这种名字挂在 alias 上的写法整条漏网，M1 首跑是绿的 —— 改成同时收 `module + '.' + alias.name` 后立刻咬住。
 - 产品码零改动：`git diff --name-only -- tools scripts` 为空，派活链一字节未动。
+## 2026-11-21 T-AG686 GHA 五仓读数回写 + 号池桩缺件不再裸崩
+
+- 文档 §6 换到 `ce93720e` 那趟（job `136757280859` / attempt 2，23 门全绿、逐门秒求和 3669.14 s、作业墙钟 1046 s），并把同 head 的 attempt 1（job `136748365260`，唯一红门 `web_live`，重跑即绿）一并写进去。
+- 新增 §9：五个镜像仓各跑什么、最新读数、以及「run 结论永远是 failure 但门禁作业是绿的」这条读法；§7 补第 6 条 workflow scope 实测（contents API 对两仓都 404）。
+- 号池桩缺 `projects.toml` 不再抛裸 `FileNotFoundError`：`gate_profile.py` 的 `_cross_check` 拒收这类 profile（退 2 `PROFILE_INVALID`）、`profiles/engineering.toml` 的 `need` 补齐五件、`build_snapshot.py` 的 rewrite 段抽成 `_rewrite_projects_root()` 并在读前判存在（缺 ⇒ `POOL_STUB_INCOMPLETE` 退 6）。
+- 钉子三条进 `tests/test_gha_cloud_gate.py`（缺件 profile 加载即拒 / 目录里每份 profile 都过这条 / 缺件退 6 而不是 traceback），该文件 29 passed。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

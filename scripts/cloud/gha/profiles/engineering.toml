@@ -52,7 +52,13 @@ diag_fixtures = true
 # 仓外的 infra/pool 在本仓是「向上找」的（tools/pool/models.py 的 find_pool_dir），
 # runner 上没有 ⇒ 快照旁边现造一份桩；projects.toml 的 root 要改写成快照路径。
 stub = true
-need = ["pool_models.py", "models.whitelist.toml", "models.live.json", "accounts.toml"]
+need = [
+  "pool_models.py",
+  "models.whitelist.toml",
+  "models.live.json",
+  "accounts.toml",
+  "projects.toml",
+]
 rewrite_root = true
 
 [smoke]

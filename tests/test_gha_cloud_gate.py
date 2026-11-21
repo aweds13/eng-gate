@@ -472,3 +472,85 @@ def test_profile_rejects_workflow_dst_escaping_the_snapshot(tmp_path):
     assert "escape.yml" in str(exc.value), str(exc.value)
 
 
+
+
+# ---------------------------------------------------------------------------
+# 卡 E151：号池桩里被改写 root 的那一件，必须也在 need 里（否则缺件是裸栈）。
+# ---------------------------------------------------------------------------
+
+
+def _write_profile(tmp_path, name, pool_body):
+    prof = tmp_path / (name + ".toml")
+    prof.write_text(
+        'name = "' + name + '"\n'
+        'message = "gate: someone 1 gate"\n'
+        "[remote]\n"
+        'transport = "https"\n'
+        "[pool]\n" + pool_body,
+        encoding="utf-8",
+    )
+    return prof
+
+
+def test_rewrite_root_without_projects_in_need_is_rejected_at_load(tmp_path):
+    """判据 4：rewrite_root = true 却把 projects.toml 漏在 need 外 ⇒ 加载即拒（不是裸栈）。
+
+    这条挡的是「桩缺件时报的是 FileNotFoundError」—— 缺的那一件没人开跑前查，
+    于是退出码落到 1，与 0/2/3/4/5/6 这张表对不上（卡 E151 实测踩过两趟）。
+    """
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_rewrite_root")
+    bad = _write_profile(tmp_path, "stubby", "stub = true\n"
+                         'need = ["pool_models.py", "accounts.toml"]\n'
+                         "rewrite_root = true\n")
+    with pytest.raises(mod.ProfileError) as exc:
+        mod.load(bad)
+    msg = str(exc.value)
+    assert "projects.toml" in msg, "拒了但没点名缺哪一件：" + msg
+    assert "rewrite_root" in msg, "拒了但没说是哪个键招的：" + msg
+
+    # 反面：need 里补上它 ⇒ 加载通过（否则这条判据就是「永远红」）
+    good = _write_profile(tmp_path, "stubby", "stub = true\n"
+                          'need = ["pool_models.py", "accounts.toml", "projects.toml"]\n'
+                          "rewrite_root = true\n")
+    assert mod.load(good)["pool"]["need"][-1] == "projects.toml"
+
+
+def test_every_profile_that_rewrites_root_lists_projects_toml():
+    """判据 5：目录里每一份要改写 root 的 profile 都把 projects.toml 列进 need。
+
+    只修 engineering 那份的话，下一个加 profile 的人会照抄一个漏项 ——
+    判据住在加载器里还不够，得有人真的把那句「所有 profile 都过」说出来。
+    """
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_all_profiles")
+    names = mod.list_repos()
+    assert names, "profiles/ 里一份都没有"
+    guilty = []
+    for name in names:
+        pool = mod.load(name)["pool"]
+        if pool["rewrite_root"] and "projects.toml" not in pool["need"]:
+            guilty.append(name)
+    assert not guilty, (
+        f"{guilty} 这些 profile 要改写 projects.toml 的 root，却没把它列进 [pool].need —— "
+        "桩缺它时报的是 FileNotFoundError 而不是 POOL_STUB_INCOMPLETE"
+    )
+
+
+def test_rewrite_projects_root_missing_file_is_pool_code_not_traceback(tmp_path, capsys):
+    """判据 4 第三处：rewrite 段自己判存在 —— 缺 projects.toml ⇒ 退 6 + POOL_STUB_INCOMPLETE。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_rewrite_root")
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    with pytest.raises(SystemExit) as exc:
+        mod._rewrite_projects_root(str(stub), str(tmp_path / "snap"))
+    assert exc.value.code == mod.EXIT_POOL, (
+        f"缺 projects.toml 却退了 {exc.value.code}（6 才是「仓外号池桩不成立」）"
+    )
+    assert "POOL_STUB_INCOMPLETE" in capsys.readouterr().out
+
+    # 正面：有它 ⇒ 改写成功，root 指向快照
+    (stub / "projects.toml").write_text('root = "old"\n', encoding="utf-8")
+    snap = tmp_path / "snap"
+    mod._rewrite_projects_root(str(stub), str(snap))
+    assert (stub / "projects.toml").read_text(encoding="utf-8").strip() == (
+        'root = "' + snap.as_posix() + '"'
+    )

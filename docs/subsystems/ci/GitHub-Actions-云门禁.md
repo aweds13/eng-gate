@@ -141,19 +141,25 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage al
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
 补丁打不上 / 树陈旧），这套是「造快照」的失败面。两张表各自钉在自己的测试里，别混着记。
 
-## 6. 真读数（最近一趟 2026-11-21：23 门全绿，骨架自己跑的那一趟）
+## 6. 真读数（最近一趟 2026-11-21：23 门全绿；同一 head 的第一次是 22 绿 1 红）
 
-镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136685943795`（run `44852205296`，head `97d009e5`）。
-这一趟就是**仓里这份 profile 骨架**自己跑出来的：`scripts/cloud/gha/build_snapshot.py` 带
-`--repo engineering --stage all` 从主树 `37a09b98` 造快照、提交成 `97d009e5`、推 `main`，再由镜像仓那个冻结的
+镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136757280859`（run `44871996999`，head `ce93720e`，
+`run_attempt=2`）。这一趟是**仓里这份 profile 骨架**自己跑出来的：`scripts/cloud/gha/build_snapshot.py` 带
+`--repo engineering --stage all` 从源树造快照、提交成 `ce93720e`、推 `main`，再由镜像仓那个冻结的
 `Windows HKCU autostart E2E` 作业执行。读数：23 门、`not_run` 空、**红门 0 个**；`render` 是唯一 `EXCLUDED`
 （金样本采集自主机 `DEV-HOST`，runner 上不跑，**不算红**）。
 
-读数原文（源：job `136685943795` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
+★ **同一个 head 的第一次（job `136748365260`，`run_attempt=1`）不是全绿**：红门 1 个 —— `web_live`，
+`summary` 原文 `[FAIL] 真机自检没跑完：PUT http://127.0.0.1:56390/api/settings/ai`。
+重跑**同一个环境、同一个 head** 就绿了（就是上面这一趟）⇒ 那是 `web_live` 起的那套本机服务在
+连接层抖了一下，**不是稳定红**，也不是判据变严。两趟都写在这里，是因为只写绿的那趟会让人以为
+「这棵树一次就绿」（下次复现不出来就会怀疑判据），只写红的那趟会让人以为门禁坏了。
+
+读数原文（源：job `136757280859` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
 本机落盘在 gates/enggate-logs 下，不进仓）：
 
 ```
-ok=True  host=runnervmbpeip  rev=97d009e5  branch=main  n_gates=23  not_run=[]  at=2026-11-21T02:04:05
+ok=True  host=runnervmbpeip  rev=ce93720e  branch=main  n_gates=23  not_run=[]  at=2026-11-21T06:35:25
 py=3.12.10  workers=4
 ```
 
@@ -161,33 +167,35 @@ py=3.12.10  workers=4
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
-| `pytest` | 938.20 | `contrast` | 90.77 |
-| `pytest_chain` | 583.66 | `style` | 91.17 |
-| `ui_flow` | 636.37 | `check_layers_selftest` | 90.53 |
-| `web_live` | 104.73 | `skills_claims` | 95.41 |
-| `acceptance` | 105.15 | `contract_doc_table` | 37.88 |
-| `audit` | 106.18 | `mypy` | 37.65 |
-| `check_layers` | 105.02 | `docs` | 33.43 |
-| `lf1_live` | 92.93 | `audit_titles` | 7.11 |
-| `proxy` | 92.59 | `invariants` | 6.62 |
-| `ui_dom_probe` | 92.26 | `ruff` | 5.74 |
-| `commands` | 91.81 | `render` | 0（本机专用，`EXCLUDED`） |
-| `ui_text` | 91.49 | | |
+| `pytest` | 970.46 | `commands` | 90.95 |
+| `ui_flow` | 661.97 | `ui_text` | 90.57 |
+| `pytest_chain` | 624.26 | `style` | 90.45 |
+| `check_layers_selftest` | 114.32 | `contrast` | 89.94 |
+| `audit` | 113.01 | `skills_claims` | 89.64 |
+| `acceptance` | 111.41 | `proxy` | 91.50 |
+| `web_live` | 108.28 | `lf1_live` | 91.85 |
+| `check_layers` | 107.24 | `ui_dom_probe` | 91.25 |
+| `contract_doc_table` | 38.79 | `mypy` | 38.37 |
+| `docs` | 34.12 | `audit_titles` | 7.33 |
+| `invariants` | 6.83 | `ruff` | 6.60 |
+| `render` | 0（本机专用，`EXCLUDED`） | | |
 
-同源求和 **3536.7 s ≈ 58.9 min**；job 从起跑到结束 **1015 s ≈ 16.9 min**（源：GitHub Actions job 接口的
-`started_at 2026-11-21T01:47:16Z` / `completed_at 2026-11-21T02:04:11Z`）—— 逐门 `seconds` 是**墙钟相加**，
+同源求和 **3669.14 s ≈ 61.2 min**；job 从起跑到结束 **1046 s ≈ 17.4 min**（源：GitHub Actions job 接口的
+`started_at 2026-11-21T06:18:05Z` / `completed_at 2026-11-21T06:35:31Z`）—— 逐门 `seconds` 是**墙钟相加**，
 4 worker 并行下远大于总时长，别拿它当 SLA。
 
 两处要看清楚，别把这张表读成「每门都判完了」：
 
 - `docs` 那门的 `summary` 原文是 `CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS`，`exit_code=0` 只说明
   它没超基线；「判不出」的那批条目在 runner 上照样判不出。
-- `pytest` 那门的 `summary` 原文是 `5458 passed, 5 skipped, 1 xfailed`，与更早几趟的数字不同属正常
-  （树在变），能比的是「红门 0 个」这一条。
+- `pytest` 那门的 `summary` 原文是 `5489 passed, 5 skipped, 2 xfailed, 4 warnings in 964.14s`，
+  与更早几趟的数字不同属正常（树在变），能比的是「红门 0 个」这一条。
 
-前一趟（同一份构建器、profile 骨架落地后的第一趟）是 job `136613578025`（run `44830398970`，head
-`190903a0`）：同为 23 门全绿、`pytest` 1135.26 s、同源求和 4464.59 s、job 1217 s。两趟连着全绿，
-说明那一趟不是侥幸。
+往前数，profile 骨架落地后还有两趟全绿：job `136685943795`（run `44852205296`，head `97d009e5`，
+`pytest` 938.20 s、同源求和 3536.7 s、job 1015 s）与 job `136613578025`（run `44830398970`，head
+`190903a0`，`pytest` 1135.26 s、同源求和 4464.59 s、job 1217 s）。三趟连着全绿（其中一趟是重跑），
+说明绿的那几趟不是侥幸 —— **同时**说明同一份判据的墙钟在 runner 上会在 1015～1046 s 之间摆，
+拿单趟的秒数当性能基线会得出错误结论。
 
 再往前，2026-11-19 真跑过两趟：job `135331686931`（run `44456198821`，head `cdb2c0fa`，886 s）与
 job `135640738507`（run `44547171433`，head `14220c7c`，1343 s），同为 23 门全绿；那两趟的 `pytest` 分别
@@ -211,6 +219,9 @@ job `135640738507`（run `44547171433`，head `14220c7c`，1343 s），同为 23
    `datetime.date.today()` ⇒ 不钉就会让快照里 README 的日期与 runner 现算差一天，连带一批 pytest 红。
 5. **仓外号池桩每次现造**：它是零凭据的合成件，只为了让「号池目录在哪」这类判据有东西可读；
    它证明不了真号池能派活。
+6. **workflow scope 的事实测过若干轮，别再猜**：本机 token 的 scopes 是 `gist` / `read:org` / `repo` / `user`，
+   没有 `workflow`。`git push` 写 `.github/workflows/` 被明拒；contents API（`PUT .../contents/.github/workflows/<文件>`）
+   对 `om-gate` 与 `eng-gate` 都回 `404 Not Found`（同一个 token 建普通文件是通的）。详见 §9 末段。
 
 ## 8. 每仓一份 profile：同一份骨架服务第二个仓
 
@@ -290,3 +301,40 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
    里打出来（一个 JSON，23 道门）；OpenMAIC 那边是 vitest 自己的四段汇总行，没有统一的 JSON 外壳。
    想要统一形状，得给第二仓写一个适配器 + 装一份自己的 workflow —— 那是另一张卡的活。
 
+## 9. 五个仓都在 GitHub 上跑：谁跑什么、读数在哪（2026-11-21 现读）
+
+「把测试搬到 GitHub」这条腿落到的是**五个镜像仓**（一个源仓一个），不是一份大 workflow。
+形状一样：一棵快照树 + 一份 workflow（冻结的或仓自带的）+ 一个 Windows 作业打一行读数。
+
+| 镜像仓 | 可见性 | 源仓 | 跑什么 | 最近那趟（head / run / 作业） | 读数 |
+|---|---|---|---|---|---|
+| `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `ce93720e` / run `44871996999`（attempt 2）/ `Windows HKCU autostart E2E` `136757280859` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 3669.14 s（§6） |
+| `aweds13/om-gate` | **public** | `OpenMAIC` | 它自己 `ci.yml` 的 `unit` 四片 `vitest run --shard=N/4` | `92f3c6fe` / run `44753382083` / `Unit Tests (N/4)` × 4 | 用例 64 failed / 14727 passed / 448 skipped，四片相加 ≈ 717.7 s（§8.3） |
+| `aweds13/fw-gate` | private | `framework` | 那棵树自己的 `pytest`（适配器打 JSON） | `f31972d7` / run `44892725961` / `136811824353` | `{"ok": true, "returncode": 0, "suite": "tests", "passed": 55, "failed": 0}`，作业 25 s |
+| `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run`（不分片） | `9bbc4a0a` / run `44896327615` / `136822660424` | `ok=false`：44 个用例文件、1 条 FAIL（下面第 3 条），vitest 段 241.3 s |
+| `aweds13/ura-gate` | private | `UltraRAG` | 那棵树自己的 `pytest` + `faiss-cpu` extra | `dc6fcb9e` / run `44898028812` / `136827750756` | `{"ok": true, "extras_rc": 0, "passed": 23, "failed": 0}`，作业 123 s |
+
+三条要说清楚的事：
+
+1. **每个 run 的汇总结论都是 `failure`，这不是门禁红**。四个借模板生成的仓（`eng-gate` / `fw-gate` / `dsh-gate` / `ura-gate`）
+   各自继承了一整套 OpenBiliClaw 的 workflow；与本仓无关的那些已逐个 `disabled_manually`（每仓只剩 `CI` 是 `active`），
+   但 `CI` **这一份文件里**还带着三个模板作业（`test` / `Smoke-build Firefox extension` / `Web guided-init E2E`）——
+   它们跑的是模板仓的代码，前两个一直红、第三个 skip。所以读读数要看**那个 Windows 作业**，不要看 run 的脸色：
+   `gh api repos/<owner>/<repo>/actions/runs/<id> --jq .conclusion` 对这几仓永远是 `failure`。
+2. **两仓的 workflow 归自己**：`om-gate` 是 public、workflow 是它原树带的，8 份全 `active`，我们不关也不改；
+   另外四仓的 workflow 是建仓时从模板带过来的，与源仓无关的那些已关。
+3. **`dsh-gate` 那条红是 Windows 的 chmod 语义，不是代码坏**：唯一 FAIL 在 `tests/store.spec.ts`（「目录只有属主可进、库只有属主可读」），
+   断言原文 `AssertionError: expected [ 438, 438 ] to deeply equal [ 448, 384 ]` —— 它比的是 `statSync(...).mode & 0o777`，
+   而 NTFS 上 `0o700` 目录 / `0o600` 文件会落成 `438`（`0o666` 家族）。要它绿只有两条路：换 Linux runner，或让那条判据认平台 ——
+   两条都超出「搬上去跑」这件事，留给源仓自己定。
+
+★ 读数的形状**今天不统一**：`eng-gate` 是一段 BEGIN/END 包着的 JSON（23 道门），`fw-gate` / `ura-gate` 是较小的 JSON（`passed` / `failed` / `red`），
+`dsh-gate` 是带 `steps` 的 JSON（`node --version` / `pnpm --version` / `install` / `vitest run` 各自的 rc；
+**注意它的 `passed` / `failed` 都是 0** —— 适配器没解析计数，真实结果只有 vitest 自己的 `[43/44]` `[44/44]` 与那一行 FAIL 能看出来），
+`om-gate` 干脆是 vitest 自己的四段汇总行。这不只是「不好看」：想用一条命令把五个仓的读数收成一张表，得先各自写提取器。
+要统一就得给每仓写适配器 + 装一份自己的 workflow —— 而 workflow 今天就写不进去（§7 第 1 条、§8.4 第 1 条）。
+
+★ **workflow scope 的实测轮次**（省得下次再猜）：本机 token 的 scopes 是 `gist` / `read:org` / `repo` / `user`，没有 `workflow`。
+除 `git push` 被明拒（报 `refusing to allow an OAuth App to create or update workflow ... without workflow scope`）之外，
+本轮又用 contents API 试了一次：`gh api -X PUT repos/aweds13/<仓>/contents/.github/workflows/<新文件>.yml` 对 `om-gate` 与 `eng-gate`
+**都回 `404 Not Found`**（不是 403）—— 同一个 token 建普通文件是通的，只有这条路径 404。所以「改不了 workflow」不是某一仓的怪癖，是 scope 的事。
