@@ -1,0 +1,15 @@
+[entries."T-G385"]
+id = "T-G385"
+title = "封存指纹临时索引每次调用唯一：并发读者不再互相锁死回退None"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/run_gates.py",
+  "file:tests/test_gate_index_path.py",
+  "test:test_gate_index_path.py::test_index_path_is_unique_per_call",
+  "test:test_gate_index_path.py::test_index_name_carries_pid_and_a_counter",
+  "test:test_gate_index_path.py::test_concurrent_readers_all_get_the_same_fingerprint",
+  "test:test_gate_index_path.py::test_successful_call_leaves_no_index_behind",
+]
+gaps = "1. 判据 2 钉的是「同一棵真仓上 4 个 spawn 进程 × 5 次 tree_without_gates 全非空且一致」，它保证的是名字唯一这条**必要条件**；门禁里 `-n 2 --dist worksteal` 那种 worker 调度没有被高频复现，所以「以后不再抽到」是推论不是读数。指针 tests/test_gate_index_path.py2. 「git 认不出 rev-parse --git-path 时的退路也唯一」没有独立钉子：退路用的是同一个 `_unique_index_name()`，静态可读，变异 M-A/M-B 只钉了前缀与序号，没有伪造一个坏 git 去真跑。指针 scripts/run_gates.py3. `_discard_index` 在 unlink 抛 PermissionError（Windows 上被杀毒锁文件）时故意只 suppress(OSError) 不上报，所以「不留垃圾」这条判据在被外部进程咬住文件的那一刻会静默留下一份孤儿索引 —— 这是取舍不是证明。指针 scripts/run_gates.py"
+

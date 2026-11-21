@@ -18,6 +18,10 @@
 - §8.2 判据「engineering 逐字不变」的条数从 2786 改成 **2793**（源：E146 落地时那两趟同 HEAD 快照的对比）。
 - `复盘/交接.d/T-AG680.md` 的「22 绿 1 红」原句后加补注行（卡 E149 / `T-AG682`、2026-11-21），说明该红门已由 E148 修掉、修完 23 门全绿；汇总文件由 `tools/sync_docs.py` 生成，未手改。
 - 读数：卡树 `check_docs.py --mode report` ⇒ 死指针 147（基线 147，+0）；`check_layers.py` ⇒ PASS；`check_derived_docs.py --check` ⇒ 双 OK。
+## 2026-11-21 T-G385 封存指纹的临时索引改成每次调用唯一：并发读者不再互相锁死成 None
+- `scripts/run_gates.py` 的临时索引名从固定 `dsh_gates_index` 改成 `dsh_gates_index.<pid>.<seq>`（`_unique_index_name()`，进程内序号带锁递增），两条退路同用这个名字；`tree_without_gates` 的清理收进 try/finally，成功/read-tree 失败/write-tree 失败/OSError 四条路径都不留孤儿索引。
+- 新建 tests/test_gate_index_path.py（三条判据：路径唯一 + 4 spawn 进程 × 5 次并发全部非空且一致 + 三条路径跑完 git dir 里零 `dsh_gates_index*` 残留）。
+- 实测：并发探针 4 进程 × 5 次从「20 次里回退 14 次」变成「20 次全非空、全为同一个哈希、stderr 零警告」；封存口径（include_worktree / exclude_gates / `rm -f gates`）一个字节没动。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

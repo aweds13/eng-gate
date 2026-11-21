@@ -997,6 +997,29 @@ INDEX_NAME = "dsh_gates_index"
 TREE_SCOPE = "worktree-minus-gates"
 
 
+#: 调用唯一后缀的进程内序号。★ 必须**进程内也递增**（卡 E147）：只加 pid 时，同一进程
+#: 连调两次仍是同一个名字，两个线程照样撞 git 自己的 `<名字>.lock`。
+_INDEX_SEQ = 0
+_INDEX_SEQ_LOCK = threading.Lock()
+
+
+def _unique_index_name() -> str:
+    """这一次调用自己的临时索引文件名：`dsh_gates_index.<pid>.<seq>`。
+
+    ★ 卡 E147（T-G385）病根：名字原来对同一棵树是**常量**（`INDEX_NAME`）⇒ 同一棵树上
+    两个读者同时算封存指纹时，后到的那个撞上 git 自己给索引加的 `.lock`，`read-tree` 退 1
+    ⇒ 打印一行警告并回退 None（门禁用 `-n 2` 跑 pytest，实测 24 次并发调用里 14 次回退）。
+    ★ 前缀 `dsh_gates_index` 必须留着：排查与清理都靠 grep 这个名字找孤儿索引。
+    ★ 后缀用 pid + 进程内序号，不用时间戳/uuid：它同时满足「跨进程不撞」与「同进程不撞」，
+      而且是**确定形状**（能从文件名反推是谁在跑）。
+    """
+    global _INDEX_SEQ
+    with _INDEX_SEQ_LOCK:
+        _INDEX_SEQ += 1
+        seq = _INDEX_SEQ
+    return f"{INDEX_NAME}.{os.getpid()}.{seq}"
+
+
 def _git_index_path(repo: Path) -> Path | None:
     """临时索引文件路径 —— **由 git 自己给**，不再手拼 `ROOT / ".git"`。
 
@@ -1006,7 +1029,16 @@ def _git_index_path(repo: Path) -> Path | None:
     回退成 `HEAD^{tree}`（= 底座那棵树，不是"即将提交的那棵树"）。
     改用 `git rev-parse --git-path`（拿到的可能是相对路径，按 repo 拼成绝对）。
     两个办法都拿不到 → None（调用方打印警告并回退，**不许静默**）。
+
+    ★ 卡 E147（T-G385）：名字**每次调用唯一**（见 `_unique_index_name`）。两条退路同样用
+      那个唯一名字 —— 退路也得并发安全，否则「git 不认这条命令」时又退回互锁。
+      路径仍必须落在**同一个 git dir** 里：挪到仓外临时目录（`tempfile.mkdtemp`）虽然也不撞，
+      但同一棵树的两个读者就不再共享同一份索引语义，而且没人清理。
     """
+    name = _unique_index_name()
+    # ★ 这条 probe 的**调用原文**必须逐字不动（卡 E147 落地实测）：tests/test_no_window.py 的例外
+    #   名单按「规范化调用原文的 sha1」认调用 —— 改一个实参就把那条债换成一条新债，并让老条目
+    #   变成 stale（两条钉子一起红）。名字的唯一性在下一行拼，不经过这次调用。
     probe = subprocess.run(
         ["git", "rev-parse", "--git-path", INDEX_NAME], cwd=repo,
         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
@@ -1014,15 +1046,23 @@ def _git_index_path(repo: Path) -> Path | None:
     out = (probe.stdout or "").strip()
     if probe.returncode == 0 and out:
         path = Path(out)
-        return path if path.is_absolute() else (repo / path)
+        base = path if path.is_absolute() else (repo / path)
+        return base.parent / name
     probe2 = subprocess.run(
         ["git", "rev-parse", "--absolute-git-dir"], cwd=repo,
         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
     out2 = (probe2.stdout or "").strip()
     if probe2.returncode == 0 and out2:
-        return Path(out2) / INDEX_NAME
+        return Path(out2) / name
     return None
+
+
+def _discard_index(index_path: Path) -> None:
+    """删掉这一次调用自己的临时索引；删不掉只是警告级噪音，不许把结果弄红（卡 E147）。"""
+    with contextlib.suppress(OSError):
+        if index_path.exists():
+            index_path.unlink()
 
 
 def tree_without_gates(
@@ -1054,9 +1094,7 @@ def tree_without_gates(
         print("[警告] 取不到临时索引路径（git rev-parse --git-path 失败）→ 封存指纹回退",
               file=sys.stderr, flush=True)
         return None
-    with contextlib.suppress(OSError):
-        if index_path.exists():
-            index_path.unlink()
+    _discard_index(index_path)
     env_index = dict(os.environ)
     env_index["GIT_INDEX_FILE"] = str(index_path)
 
@@ -1066,31 +1104,33 @@ def tree_without_gates(
             capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
         )
 
-    read = _git_i("read-tree", rev)
-    if read.returncode != 0:
-        print(f"[警告] read-tree {rev} 失败（{(read.stderr or '').strip()[:120]}）→ 封存指纹回退",
-              file=sys.stderr, flush=True)
-        with contextlib.suppress(OSError):
-            if index_path.exists():
-                index_path.unlink()
-        return None
-    if include_worktree:
-        _git_i("add", "-A")
-    if exclude_gates:
-        # -f 必须有：read-tree 建出来的临时索引里，gates/ 下的条目与工作区、HEAD 都不一致
-        # （gates/last.json 每趟都被改写），git 会以「staged content different from both」拒删，
-        # 于是 gates/ 摘不掉、write-tree 返回的是**含 gates 的全树**，封存指纹变成假的（实测踩到）。
-        _git_i("rm", "-r", "--cached", "--ignore-unmatch", "--quiet", "-f", "gates")
-    written = _git_i("write-tree")
-    with contextlib.suppress(OSError):
-        if index_path.exists():
-            index_path.unlink()
-    tree = (written.stdout or "").strip()
-    if written.returncode != 0 or not tree:
-        print(f"[警告] write-tree 失败（{(written.stderr or '').strip()[:120]}）→ 封存指纹回退",
-              file=sys.stderr, flush=True)
-        return None
-    return tree
+    # ★ 卡 E147：清理放进 finally —— 成功、read-tree 失败、write-tree 失败、以及中间
+    #   任何一条 git 命令抛 OSError，都必须在离开前把**这一次**的索引删掉（否则每跑一次
+    #   就在 git dir 里堆一个孤儿 dsh_gates_index.*）。
+    try:
+        read = _git_i("read-tree", rev)
+        if read.returncode != 0:
+            why = (read.stderr or "").strip()[:120]
+            print(f"[警告] read-tree {rev} 失败（{why}）→ 封存指纹回退",
+                  file=sys.stderr, flush=True)
+            return None
+        if include_worktree:
+            _git_i("add", "-A")
+        if exclude_gates:
+            # -f 必须有：read-tree 建出来的临时索引里，gates/ 下的条目与工作区、HEAD 都不一致
+            # （gates/last.json 每趟都被改写），git 会以「staged content different from both」
+            # 拒删；于是 gates/ 摘不掉、write-tree 返回的是**含 gates 的全树**，封存指纹变成假的。
+            _git_i("rm", "-r", "--cached", "--ignore-unmatch", "--quiet", "-f", "gates")
+        written = _git_i("write-tree")
+        tree = (written.stdout or "").strip()
+        if written.returncode != 0 or not tree:
+            why = (written.stderr or "").strip()[:120]
+            print(f"[警告] write-tree 失败（{why}）→ 封存指纹回退",
+                  file=sys.stderr, flush=True)
+            return None
+        return tree
+    finally:
+        _discard_index(index_path)
 
 
 def staged_tree() -> str:

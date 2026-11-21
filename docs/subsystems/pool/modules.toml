@@ -79,7 +79,7 @@ cli = "`wb_status.py`、`pool_mcp` 的 `job_list` / `job_status`"
 
 [[module]]
 name = "landing.py"
-duty = "落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里"
+duty = "落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里；封存（`scripts/run_gates.py` 的 `tree_without_gates`）用的临时索引**每次调用唯一**（`dsh_gates_index.<pid>.<seq>`，卡 E147），两个读者并发算同一棵树不再互相锁死"
 cli = "`wb_land.py`"
 
 [[module]]
