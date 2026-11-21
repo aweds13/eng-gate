@@ -137,9 +137,9 @@ rid 幂等（`:305` / `:324` 已成立）在**读端**也成立：同一批 body
 | `tests/test_pipeline_view_holds.py` | 判据 3 / 4 的用例（沙箱账本 + 沙箱上报账） |
 | tests/test_f43_read_face.py（新建） | 判据 5 的零 import 钉子 |
 | `docs/subsystems/pool/modules.toml` | usage_ingest.py 的 duty 追加「读数面单独列出上报量（不进限额判据）」；pipeline_view.py 的 module 条目同步提两列 |
-| `docs/changelog.d/T-AG683.md` | 新片段（本卡改了什么、留下的钉子） |
-| `docs/traceability.d/T-AG683.toml` | 新片段，:10432 与 :11125 两条缺口在**落地时**结案（改成「读端消费者 = pipeline_view holds 块」），并注明「并进限额判断」被长期约束否决 |
-| `复盘/交接.d/T-AG683.md` | 新片段 |
+| docs/changelog.d/T-AG683.md（计划建） | 新片段（本卡改了什么、留下的钉子） |
+| docs/traceability.d/T-AG683.toml（计划建） | 新片段，:10432 与 :11125 两条缺口在**落地时**结案（改成「读端消费者 = pipeline_view holds 块」），并注明「并进限额判断」被长期约束否决 |
+| 复盘/交接.d/T-AG683.md（计划建） | 新片段 |
 | `复盘/卡/卡A392-F43读端接线-只读读数面与零import钉子.md` | 本规格 |
 
 ## 5 · 验收（可直接跑）

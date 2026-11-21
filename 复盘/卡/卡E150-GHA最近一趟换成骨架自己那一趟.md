@@ -53,7 +53,7 @@ job `136685943795` / run `44852205296` / head `97d009e5`，并写明它就是
 ## 交付
 
 1. `docs/subsystems/ci/GitHub-Actions-云门禁.md` §6：读数换 `97d009e5`、旧趟降级、耗时表换成本趟。
-2. 两个文书片段（`docs/changelog.d/T-AG685.md` 与 `docs/traceability.d/T-AG685.toml`，**计划建**）：
+2. 两个文书片段（docs/changelog.d/T-AG685.md 与 docs/traceability.d/T-AG685.toml，**计划建**）：
    由 `tools/wb_stage_card.py` 现生成，不许手写。
 
 ## 验收（落地前自跑）
