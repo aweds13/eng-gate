@@ -7176,3 +7176,20 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "A393"
+task = "T-AG684"
+title = "nopin三模块不进派活链：成文条款加静态钉子，库留着消费者钉死"
+tree = ".wt/A393"
+spec = "复盘/卡/卡A393-nopin三模块不进派活链成文条款与静态钉子.md"
+files = [
+  "tests/test_pool_nopin.py",
+  "docs/decisions/0013-nopin-not-wired.md",
+  "卡规格"
+]
+depends = [
+  "A392"
+]
+risk = "mid"
+status = "pending"
