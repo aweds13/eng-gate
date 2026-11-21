@@ -7193,3 +7193,20 @@ depends = [
 ]
 risk = "mid"
 status = "pending"
+
+[[cards]]
+id = "E150"
+task = "T-AG685"
+title = "GHA最近一趟换成骨架自己那一趟"
+tree = ".wt/E150"
+spec = "复盘/卡/卡E150-GHA最近一趟换成骨架自己那一趟.md"
+files = [
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/changelog.d/T-AG685.md",
+  "docs/traceability.d/T-AG685.toml"
+]
+depends = [
+  "E149"
+]
+risk = "low"
+status = "pending"
