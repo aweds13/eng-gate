@@ -7233,3 +7233,24 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E152"
+task = "T-AG687"
+title = "症状行不许被61条OK挤掉（detail兜底与收口保留★）"
+tree = ".wt/E152"
+spec = "复盘/卡/卡E152-症状行不许被OK挤掉.md"
+files = [
+  "scripts/run_gates.py",
+  "tools/web_live_check.py",
+  "tests/test_gate_summary_truthful.py",
+  "tests/test_web_live_timeout.py",
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/changelog.d/T-AG687.md",
+  "docs/traceability.d/T-AG687.toml"
+]
+depends = [
+  "E151"
+]
+risk = "mid"
+status = "pending"
