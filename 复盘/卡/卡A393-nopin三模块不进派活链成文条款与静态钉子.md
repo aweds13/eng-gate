@@ -4,7 +4,7 @@
 
 > depends 说明：**只有一条 depends A392，且它不是「文件相交」而是「判据前提」**。A392（F43 读端接线）把 `tools/pipeline_view.py` 变成 `usage_ingest` 的第二个 importer —— 本卡判据 2 的白名单把它写进去了，A392 没落之前那条断言必然红。所以 depends A392 是判据依赖，不是域依赖。判据两处：`tools/pool/plan.py:61-64` 逐字「`files` 里**不许**出现的通配字符 … 「出现 "file" 这类通配 ⇒ 它与**任何**精确路径都不相交 ⇒ 两张卡明明改同一批文件却互不报冲突」，以及 `tools/pool/plan.py:320-327` 的「files 相交 …（同一文件两个写者；要共存就给其中一张写 `depends`）」。实算读数：`docs/workbacklog.toml` 里 status 非 done 的卡 14 张 = D1 到 D8、C1、C2、A375、A384、A389、A391（tomllib 实读，2026-11-21 09:58）；其中认领 pool 文档的只有三张 —— A375 与 A391 认领 `docs/subsystems/pool/README.md`、A384 认领 `docs/subsystems/pool/模型与号池.md`、A375 另认领 `docs/subsystems/pool/modules.toml`。本卡域四份**全是新建文件**，与这 14 张零相交。**前提是本卡不碰那三份文档**（见「卡域」末两条与判据 3 的代价）。
 
-> 基准说明：抬头的 `37a09b98` 是起草这一刻实读的主树 HEAD（`37a09b9848efb405166a8b2b87de0912b938f005`，`git rev-parse` 实读），提交「fix(tools): 封存指纹临时索引每次调用唯一：并发读者不再互相锁死回退None（T-G385）」，2026-11-21 09:35:42 +0800。工作树从那一刻的 HEAD 切出来后行号要重核：本卡引用的 import 行号最密的是 `tools/wb_dispatch.py`（4336 行，22 处 pool import），它每天都在长。
+> 基准说明：抬头的 `37a09b98` 是起草这一刻实读的主树 HEAD（`37a09b9848efb405166a8b2b87de0912b938f005`，`git rev-parse` 实读），提交「fix(tools): 封存指纹临时索引每次调用唯一：并发读者不再互相锁死回退None（T-G385）」，2026-11-21 09:35:42 +0800。工作树从那一刻的 HEAD 切出来后行号要重核：本卡引用的 import 行号最密的是 `tools/wb_dispatch.py`（4336 行，26 处 pool import），它每天都在长。★ 起草时记的是 22，物化时在卡树 AST 实读是 26（条目里补上了 `:111` / `:112` / `:563` 三条 `import pool_accounts` / `import pool_quota`），这里就地改成实测值 —— 两个数不许并存。
 
 > 依据（红线来自用户，不是仓内既有条款）：本会话用户多次重申的硬约束 —— 「speed.py / pricing.py / usage_ingest.merged_tokens 不许接进派活链（派活顺序、限额判断、路线选择都不许消费它们）」。这条规矩今天在仓内**没有成文条款**（见判据 5 与「诚实边界」第 6 条）；同类先例只有 `docs/subsystems/pool/README.md:170` 那一行「刻意不接进派活，卡 218 已裁定」（对象是 `tools/pool/trae_dispatch.py`）。
 
@@ -19,7 +19,7 @@
 **一句话：三件东西都是「有模块、零生产消费者」，而「零消费者」这件事今天只被三份**行为**测试间接照看着，没有一条钉子钉住「谁不许消费它们」。**
 
 1. **派活侧四个文件，一个都没 import 这三个模块**（AST 实扫，不是 grep）：
-   - `tools/wb_dispatch.py`（4336 行 / 30 个顶层模块名）22 处 pool import，逐行：`:121` account_id、`:122` guards、`:123` outcomes、`:124` registry、`:125` rpm、`:126` sink、`:127` sticky、`:128` task、`:129` `pool.jobs.card_artifacts`、`:130` `pool.model_registry`、`:148` `pool.models`、`:153` `pool.plan`、`:158` `pool.review`、`:467` / `:508` limits、`:2758` `pool.models.STALE_HOURS`、`:3580` callers、`:3644` ledger_spend、`:3645` limits_check、`:3646` limits_policy、`:3691` holds_wiring、`:3744` accounts_scope、`:4125` ledger_spend。三个禁名 0 命中。
+   - `tools/wb_dispatch.py`（4336 行 / 30 个顶层模块名）**26 处** pool import（2026-11-21 11:40 卡树 AST 实读；起草时记 22），逐行：`:111` `import pool_accounts`、`:112` `import pool_quota`、`:121` account_id、`:122` guards、`:123` outcomes、`:124` registry、`:125` rpm、`:126` sink、`:127` sticky、`:128` task、`:129` `pool.jobs.card_artifacts`、`:130` `pool.model_registry`、`:148` `pool.models`、`:153` `pool.plan`、`:158` `pool.review`、`:467` / `:508` limits、`:563` `import pool_accounts`、`:2758` `pool.models.STALE_HOURS`、`:3580` callers、`:3644` ledger_spend、`:3645` limits_check、`:3646` limits_policy、`:3691` holds_wiring、`:3744` accounts_scope、`:4125` ledger_spend。三个禁名 0 命中。
    - `tools/pool/limits_check.py`（174 行 / 6 个模块名）：唯一的 pool 侧 import 是 `:29` 「from pool.limits_policy import Limit, window」。0 命中。
    - `tools/pool/route.py`（883 行 / 9 个模块名）：**一个 pool 包 import 都没有**，`:58` 是「import pool_quota」。0 命中。只提醒一处假阳性：`tools/pool/route.py:317` 的别名元组里有字符串 "speed"（FASTEST 的别名），那是**名字**不是 import —— 走 AST 就不会误判。
    - `tools/pool/gateway.py`（1458 行 / 19 个模块名）：pool 侧 `:58` guards、`:59` holds、`:60` lanes、`:61` model_registry、`:62` models、`:63` prompt_parts、`:64` route、`:65` route_log、`:66` rpm、`:67` sink。0 命中。
@@ -48,7 +48,7 @@
 
 ```python
 DISPATCH_SIDE = (
-    "tools/wb_dispatch.py",        # 派活器本体（4336 行，22 处 pool import）
+    "tools/wb_dispatch.py",        # 派活器本体（4336 行，26 处 pool import）
     "tools/pool/limits_check.py",  # 限额判断（174 行）
     "tools/pool/route.py",         # 路线选择（883 行）
     "tools/pool/gateway.py",       # 网关（1458 行）
@@ -141,10 +141,10 @@ ALLOWED_IMPORTERS = frozenset({"tools/pool_mcp.py", "tools/pipeline_view.py"})
 
 | 文件 | 动作 | 内容 |
 |---|---|---|
-| tests/test_pool_nopin.py（计划建） | 新建 | 判据 1（四文件 AST 不相交 + 前提自证）、判据 2（名字级零引用 + importer 白名单相等 + 正对照）、判据 5（ADR 结构 + 9 个名字 + 编号）、判据 3A 三模块零消费者（若选 3A） |
-| docs/decisions/0013-nopin-not-wired.md（计划建） | 新建 | 标题「speed / pricing / merged_tokens 不进派活链」；「决定」一节逐字写 3 个模块名 + 4 个派活侧文件 + 「接进派活链 = 违反本 ADR，钉子红」；「候选方案」一节写判据 3 被否的那一支与理由 |
-| 复盘/卡 下的本卡规格（计划建） | 新建 | 本文件物化后的形态；「本卡落地实测」一节填真读数 |
-| docs/changelog.d/<台账号>.md（计划建） | 新建 | 一行摘要 + 证据指针 |
+| tests/test_pool_nopin.py（已建，322 行） | 新建 | 判据 1（四文件 AST 不相交 + 前提自证）、判据 2（名字级零引用 + importer 白名单相等 + 正对照）、判据 5（ADR 结构 + 9 个名字 + 编号）、判据 3A 三模块零消费者（若选 3A） |
+| docs/decisions/0013-nopin-not-wired.md（已建，109 行） | 新建 | 标题「speed / pricing / merged_tokens 不进派活链」；「决定」一节逐字写 3 个模块名 + 4 个派活侧文件 + 「接进派活链 = 违反本 ADR，钉子红」；「候选方案」一节写判据 3 被否的那一支与理由 |
+| 复盘/卡 下的本卡规格（即本文件） | 新建 | 本文件物化后的形态；「本卡落地实测」一节填真读数 |
+| docs/changelog.d/T-AG684.md（已建，5 行） | 新建 | 一行摘要 + 证据指针 |
 
 ## 验收命令
 
@@ -163,6 +163,9 @@ python -X utf8 scripts/gen_pool_readme.py --check
 python -X utf8 -m ruff check tests/test_pool_nopin.py
 ```
 
+★ **落地实跑一律带 `-p no:xdist`**：上面 ① ② 两块照卡规格抄下来少了这一个开关，装了 pytest-xdist 的机器上会并发跑。物化后本卡的两条判据命令实际是
+`python -X utf8 -m pytest tests/test_pool_nopin.py -o addopts= -q --no-cov -p no:xdist`，既有五套同理（读数见「本卡落地实测」）。
+
 **今天的基线读数（起草时实跑，`37a09b98`）**：五套既有判据合跑 ⇒ **63 passed in 13.12s**（`--collect-only` 逐文件：speed_tells 13 / pricing 17 / usage_ingest 14 / holds_wiring 12 / route_wiring 7）；`scripts/check_docs.py --decisions` ⇒ 扫到 12 条、`[OK ]`、退出码 0；`scripts/gen_pool_readme.py --check` ⇒ `[OK  ] docs/subsystems/pool/README.md 与现算一致（60 个文件 / 24293 行 / 2026-11-21）`、退出码 0。
 
 **已知噪音（别当红）**：
@@ -173,6 +176,95 @@ python -X utf8 -m ruff check tests/test_pool_nopin.py
 4. 判据 1 / 2 会在「真有人把这三个模块接进派活链」那一天变红 —— **这是设计意图，不是回归**。
 5. 判据 3 无论选哪一支，都会让域与 **A375** 相交（3B 必然要改 `docs/subsystems/pool/modules.toml`；3A 若要在 README 表 B 补一行也必然）—— 那不是噪音，那是 `depends` 的判据；抬头已写明「选 3B 就要当场改」。
 6. 「京」类误判提醒：`tools/pool/route.py:317` 的字符串 "speed" 是 FASTEST 的**别名**，不是模块名；`tools/pool/speed.py:23` 提到 magpie 的 internal/gateway/usage_ingest.go:77 是**另一个仓的同名文件**，与 `tools/pool/usage_ingest.py` 无关。走 AST 两条都不会误判 —— 别改成文本 grep。
+
+## 本卡落地实测（卡树 .wt/A393，2026-11-21 11:40–12:45）
+
+四条判据命令都在**卡树**里跑（`cwd = .wt/A393`），一律 `-o addopts= -q --no-cov -p no:xdist`。
+
+### 交付文件与行数
+
+| 文件 | 行数 | 字节 | 行尾 |
+|---|---|---|---|
+| tests/test_pool_nopin.py（新建） | 322 | 15415 | crlf 322 / lf-only 0 |
+| docs/decisions/0013-nopin-not-wired.md（新建） | 109 | 8591 | crlf 109 / lf-only 0 |
+| docs/changelog.d/T-AG684.md（新建） | 5 | 580 | crlf 5 / lf-only 0 |
+| 本文件（改：22 → 26、补本节） | 310 | 43471 | crlf 310 / lf-only 0 |
+
+产品码零改动：卡树里 `git status --porcelain` 只有三行 `??`（上面三份新文件）+ 本文件一行 ` M`，`git diff` 对 `tools/` 与 `scripts/` 无输出。
+
+### 判据的自测命令与读数
+
+1. **判据 1（派活侧 import 末段零相交）** —— 断言 `test_dispatch_side_imports_never_touch_banned_modules`。前提自证实读：`tools/wb_dispatch.py` 30 / `tools/pool/limits_check.py` 6 / `tools/pool/route.py` 9 / `tools/pool/gateway.py` 19 ⇒ **合计 64**（门槛 60），禁名命中 0。
+   ★ 实测踩到一个真坑：`_import_tails` 一开始只收 `ImportFrom.module`，于是 `from pool import speed`（名字挂在 alias 上、module 是光秃秃的 `pool`）**整条漏网**，变异 M1 第一次跑竟是绿的 —— 判据自己没牙。修法是把 `module + 点 + alias.name` 也收进末段集合；改完 M1 立刻咬住。
+2. **判据 2 ①（名字级零引用）** —— `test_dispatch_chain_never_names_merged_tokens`；派活链五文件（四份 + `tools/pool/holds_wiring.py`）的名字集合里 `merged_tokens` / `reported_summary` 全 False。
+3. **判据 2 ②（importer 白名单）** —— `test_usage_ingest_importers_stay_in_whitelist`：今天是**子集 + 必含**（`tools/pool_mcp.py` 在，且不越出 `ALLOWED_IMPORTERS`），**不是**字面的「相等」—— 因为 `tools/pipeline_view.py` 今天还没接线（A392 未落），写成相等必红。A392 落下后收紧成相等是一行改动（ADR 0013「决定」三已写明这条口径）。
+4. **判据 2 ③（正对照）** —— `test_positive_control_is_wb_dispatch_usage_in`：`tools/pool/holds_wiring.py:184` 的 `from wb_dispatch import usage_in` 仍在。**判据 3A（搜索三模块零消费者）** —— `test_search_triplet_has_zero_consumers`：`search` / `searcher` / `web_fetch` 在 178 个 py 文件的 import 集合里各 0。
+5. **判据 5（ADR）** —— `test_adr_exists_and_passes_machine_check`（结构 + 九个名字 + 真检查器）+ `python -X utf8 scripts/check_docs.py --decisions`。
+
+```bash
+# 判据 1 / 2 / 3A / 5 合跑（卡树）
+python -X utf8 -m pytest tests/test_pool_nopin.py -o addopts= -q --no-cov -p no:xdist
+# ⇒ 6 passed in 5.58s
+
+# 既有五套一条都没动、一条都没红
+python -X utf8 -m pytest tests/test_pool_speed_tells.py tests/test_pool_pricing.py tests/test_pool_usage_ingest.py tests/test_holds_wiring.py tests/test_pool_route_wiring.py -o addopts= -q --no-cov -p no:xdist
+# ⇒ 63 passed in 7.36s（与起草时同数、同逐文件条数）
+
+# ADR 结构与编号
+python -X utf8 scripts/check_docs.py --decisions
+# ⇒ [info] 决策记录：扫到 13 条（编号 0001..0013），supersedes 链 0 对
+# ⇒ [OK ] 决策记录检查通过   退出码 0
+
+# pool 清单两向对账（3A 不改码，这条只为确认没被带偏）
+python -X utf8 scripts/gen_pool_readme.py --check
+# ⇒ [OK  ] docs/subsystems/pool/README.md 与现算一致（60 个文件 / 24293 行 / 2026-11-21）   退出码 0
+```
+
+### ruff（行宽 100）
+
+```bash
+python -X utf8 -m ruff check tests/test_pool_nopin.py
+# ⇒ All checks passed!   退出码 0（ruff 0.16.6）
+```
+
+改到全绿之前被咬过三处，记下来免得下一个人重踩：① 模块 docstring 里排 markdown 表格，每行 106~114 字 ⇒ E501 六条，改成条目列表；② `_import_tails` 的 docstring 单行 108 字 ⇒ E501；③ 正对照里的嵌套 if ⇒ SIM102，提成 `is_usage_in` 再单层 if。
+
+### 反向变异（判据 4）
+
+脚本 `gates/diag/_rev_A393.py`，结果 `gates/diag/_rev_A393_result.txt`（都在主树、被 gates/diag 的 ignore 规则挡着，不是长期钉子）。真改 / 真跑 / 按**原字节**写回（不碰 git）：每份文件先 `read_bytes()` 存进内存，改变异、跑 pytest、立刻原样写回，最后再用 sha256 前 16 位自证。五次跑的都是同一条 pytest 命令。
+
+| 编号 | 真改下去的那一行 | 期望 | 实测 | sha256 前 16 位（注入前 → 注入后 → 还原） |
+|---|---|---|---|---|
+| M1 | `tools/wb_dispatch.py` 顶部插 `from pool import speed as _speed` | 判据 1 红且点名文件与名字 | **红**：`test_dispatch_side_imports_never_touch_banned_modules` FAILED，1 failed / 5 passed | `9f2bd180559d3d26` → `71ce6807b952c29e` → `9f2bd180559d3d26` |
+| M2 | `tools/pool/holds_wiring.py:184` 的 `from wb_dispatch import usage_in` 改成 `from pool.usage_ingest import merged_tokens` | 判据 2 ③ 红 | **红**：`test_positive_control_is_wb_dispatch_usage_in` + `test_usage_ingest_importers_stay_in_whitelist` FAILED，3 failed / 3 passed | `d894198b311cedde` → `9af9f8ed75d0cfdc` → `d894198b311cedde` |
+| M3 | `tools/pool/limits_check.py` 插 `from pool.pricing import cost` | 判据 1 红且点名 limits_check.py | **红**：`test_dispatch_side_imports_never_touch_banned_modules` FAILED，1 failed / 5 passed | `96bcc14bf7797e96` → `b531a3649dd45964` → `96bcc14bf7797e96` |
+| M4 | 删掉 ADR 0013 的「## 决定」一节 | 判据 5 红 | **红**：`test_adr_exists_and_passes_machine_check` FAILED，1 failed / 5 passed | `c400e9e11dabc234` → 删节后 → `c400e9e11dabc234` |
+| N1 | `tools/pool/speed.py` docstring 里加一句「（安静对照改的这一行）」 | 四条一条都不响 | **全绿**：6 passed | `610196c03b5b2dae` → `ac14ddd8c03fc4f1` → `610196c03b5b2dae` |
+
+结果文件末行：**「结论：4/4 条全部咬住，收尾绿。」**（脚本退出码 0）。五个被改文件的还原 sha256 与注入前逐字相同（结果文件里逐条列了）。
+
+### CRLF 自检
+
+`crlf > 0` 且 `lf-only == 0`：`tests/test_pool_nopin.py` 322/0、`docs/decisions/0013-nopin-not-wired.md` 109/0、`docs/changelog.d/T-AG684.md` 5/0、本文件 310/0。变异脚本写回时也自检裸 LF（`mutate()` 里断言注入后裸 LF 数为 0）—— 五个文件注入期间与还原后都没出现裸 LF。
+
+### 文档门禁读数（`scripts/check_docs.py --mode report`）
+
+| 时点 | 死指针 | drift | superseded | 判不出 |
+|---|---|---|---|---|
+| 本卡动手前（卡树 HEAD 80436182） | 150（基线 147，+3） | 561 | 1 | 2727 |
+| 本卡交付后 | 150（+3，**未涨**） | 561 | 1 | 2725 |
+
+那 +3 条**不是本卡引入**：`--json` 的 `dead_refs` 里过滤 `A393` / `nopin` / `T-AG684` 命中 **0 条**；三条全部来自 A392 规格（它的 changelog / traceability / 交接三处计划建路径，见 A392 规格 :140-142），主树已由 f8ce9d25 修掉，卡树 HEAD 80436182 不含那笔。主树同命令今天是 147（+0）。本卡的交付口径是「不新增」—— 三份新文件里的反引号没有一个指向计划建或不存在的路径。
+
+### 诚实边界（本卡落地时新发现、没坐实或坐实不了的）
+
+1. **判据 2 ② 今天不是字面的「相等」**：`tools/pipeline_view.py` 至今**没有** import `usage_ingest` / `merged_tokens` / `reported_summary`（A392 未落，主树与 .wt/A392 两个树都零命中）。所以断言写成「子集 + 必含 `tools/pool_mcp.py`」，并在测试 docstring 与 ADR 里逐字写明为什么今天只能这么钉。
+2. **「A392 落地后 `pipeline_view` 会消费 `merged_tokens`」仍然只是计划**：A392 的卡规格这么写，但代码不存在、无法验证。本卡的白名单第二项是照卡规格钉的，不是照代码钉的。
+3. **`reported_summary` 在仓里根本不存在**（`tools/pool/usage_ingest.py` 里 0 次、全仓 import 0 次）：它只作为**禁名**出现在判据 2 ①，是 ADR 正文里逐字写出的第 9 个名字（卡规格只列了 8 个）。
+4. **判据自己没牙只能靠变异照出来**：M1 第一次跑是绿的（`_import_tails` 漏了 `from pool import X` 这种写法）。读代码看不出来，只有真注入一行才发现。
+5. **没跑全量门禁**（按卡规格「不许做」第 9 条）：`scripts/run_gates.py`、全量 pytest 都没跑。所以本卡证明的是「这 6 条新钉子 + 既有 63 条绿」，**不是**「整棵树过门」。
+
+---
 
 ## 不许做
 
@@ -210,9 +302,9 @@ python -X utf8 -m ruff check tests/test_pool_nopin.py
 6. **「speed / pricing / merged_tokens 不许接进派活链」这条规矩在仓内没有任何成文条款**。它是本会话用户反复重申的口头红线，本卡的全部工作就是「把它写下来」—— 所以判据 5 是**立**条款，不是**验**条款。任何「仓里早就有这条规矩」的说法都不成立（全仓 grep 到的 `speed` 全是测试耗时语境、路由别名、或 `tools/pool/speed.py` 这个吞吐判据模块本身）。
 7. **判据 3 的答案没有**：搜索三模块该删还是该留，仓里没有任何判词（A378 只判了 MCP 上的 `web_search` / `web_fetch` 两个工具，没提这三个模块文件）。本卡把两条路的代价写清了，但**选择权在用户**。
 8. **「只读面将来会消费 `merged_tokens`」这件事没有任何证据**：`tools/pool/usage_ingest.py:44` 说「那是下一张卡」，`usage_in()` 的 `include_reported` 参数今天不存在；`tools/pool/holds_wiring.py` 走的是 `usage_in`，不是 `merged_tokens`。所以判据 2 的白名单是**照今天的样子钉的**，不是照某份设计文档钉的 —— 将来真接，是改白名单那一行，不是判据失效。
-9. **行号会漂**：本卡引用的行号全部以 `37a09b98` 为基准，`tools/wb_dispatch.py` 4336 行且每天在长（22 处 pool import 分散在 `:121` 到 `:4125`）。工作树从别的 HEAD 切出来，行号与「顶层模块名个数」都要重核 —— 判据里那些**计数**（30 / 6 / 9 / 19 / 178 / 63）也一样。已核：git diff --name-only 37a09b98..HEAD 对本卡引用的七个文件（四份派活侧源码 + speed / pricing / usage_ingest）输出为空 ⇒ 起草基准的行号今天仍然有效。
-10. **没有在 .wt 工作树里验证过**：本文件是草稿，所有读数都取自主树。物化与落地时要在卡树里重取一遍基线，尤其 `scripts/check_docs.py --mode report` 的 147 这个数（基线只许降，多一条就红一道门）。
+9. **行号会漂**：本卡引用的行号全部以 `37a09b98` 为基准，`tools/wb_dispatch.py` 4336 行且每天在长（26 处 pool import 分散在 `:111` 到 `:4125`）。工作树从别的 HEAD 切出来，行号与「顶层模块名个数」都要重核 —— 判据里那些**计数**（30 / 6 / 9 / 19 / 178 / 63）也一样。已核：git diff --name-only 37a09b98..HEAD 对本卡引用的七个文件（四份派活侧源码 + speed / pricing / usage_ingest）输出为空 ⇒ 起草基准的行号今天仍然有效。
+10. ~~没有在 .wt 工作树里验证过~~ —— **已补**：本文「本卡落地实测」一节的全部读数都在卡树里重取过；卡树的 `check_docs.py --mode report` 死指针是 150（比主树多 3，那 3 条来自 A392 规格、不是本卡），交付口径是「不新增」而非「等于 147」。
 
 ---
 
-（起草说明：本文件是**草稿**，落在 gates/diag 下、被 `.gitignore:76` 的 gates/diag 规则覆盖、不进主树也不进卡域；物化时整份写成 复盘/卡 下的卡规格，抬头台账号与卡号由立卡脚本填。写入者：本轮只读勘察工人；起草基准 `37a09b98`，2026-11-21 09:58。）
+（起草与物化说明：本文件 2026-11-21 09:58 以草稿形态起草于 gates/diag 下（起草基准 `37a09b98`，只读勘察工人），11:12 由立卡脚本物化成 复盘/卡 下的卡规格（抬头台账号与卡号由脚本填），11:40–12:45 由实现工人在卡树 .wt/A393 里补齐「本卡落地实测」并把 `22 处 pool import` 就地改成 AST 实测的 26。四个交付文件的产品码域一个字节都没改。）

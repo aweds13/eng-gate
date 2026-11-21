@@ -28,6 +28,11 @@
 - 逐门耗时表换成本趟读数（22 门求和 3536.7 s、job 墙钟 1015 s，由 `started_at 2026-11-21T01:47:16Z` / `completed_at 2026-11-21T02:04:11Z` 得），并新增两行注意事项：`docs` 门是「没判完（有 skip）」不是 PASS、`pytest` 的通过数是树在变的量。
 - 前一趟（profile 骨架落地后第一趟，head `190903a0`）降级为对照，2026-11-19 两趟与 `1e815a96` 那趟 22 绿 1 红的记述原样保留。
 - 读数：`check_docs.py --mode report` 死指针 147（基线 147，+0）、`check_layers.py` PASS、`check_derived_docs.py --check` 双 OK。
+## 2026-11-21 T-AG684 nopin 三模块不进派活链：成文条款 + 静态钉子，库留着、消费者钉死
+- 新增 `tests/test_pool_nopin.py` 六条静态钉子：派活侧两文件禁名、import 末段白名单闭集、三个零消费者模块在 178 个 py 里各 0 importer、ADR 过机器检查。
+- 新增 `docs/decisions/0013-nopin-not-wired.md`：speed.py / pricing.py / usage_ingest 三支不进派活链成文，列九个禁名与「库留着」的理由。
+- 变异照出一条真缺陷并已修：`_import_tails` 原先只收 `ImportFrom.module`，`from pool import speed` 这种名字挂在 alias 上的写法整条漏网，M1 首跑是绿的 —— 改成同时收 `module + '.' + alias.name` 后立刻咬住。
+- 产品码零改动：`git diff --name-only -- tools scripts` 为空，派活链一字节未动。
 ## 2026-11-20 T-AG660 E145 快照构建器收两个口子：不存在的 dest 退 2、冒烟红了退 5
 - `scripts/cloud/gha/build_snapshot.py`（448→470）：`main()` 加前置判 —— `--stage` 不是 `build` 且 `dest` 不是目录 ⇒ 打 `MISSING_DEST` 后 `return EXIT_CONFIG`（2），不再让 `do_push()` 在错 cwd 上抛 `NotADirectoryError: [WinError 267]`。
 - 同文件 `do_smoke()`：三段各自判非 0（含进程没起来），任一段红就 `log('SMOKE_FAILED', …)` + `sys.exit(EXIT_SNAPSHOT)`（5）；以前只把 `SMOKE*_RC` 打进日志、函数照常返回 ⇒ 冒烟红也退 0。五个码仍是 0/2/3/4/5/6，没加新值。

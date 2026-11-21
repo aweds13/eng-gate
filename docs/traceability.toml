@@ -13030,3 +13030,18 @@ evidence = [
   "test:test_pool_gateway_remote.py::test_connect_failure_names_the_machine",
 ]
 gaps = "1. 远端 provider 未真机验证：新段 verified=true 表示「显式登记、来源可追」，地址是示例域；真机地址没拿到也没接，forward_http 的 docstring 首行已写「远端段未真机验证」。指针 tools/pool/gateway.py2. 三块不移植：一址派生四 base、X-Magpie-Agent/Via 跨机身份、/v1/magpie/limit 与 quotas 远端配额转发 —— 各留一条闹钟钉，哪天被搬进来就红。指针 tests/test_pool_gateway_remote.py3. 卡规格判据 4 的 grep 原文要求 compare_digest 对 gateway.py 零命中，但它本来就有两处（docstring 与 hmac.compare_digest 实现）⇒ 该形状只对 platforms.toml 断言，gateway.py 只断言 sk-magpie 与 X-Magpie-。指针 tools/pool/platforms.toml"
+
+[entries."T-AG684"]
+id = "T-AG684"
+title = "F43读端三模块判死：库留着消费者钉死，成文条款加静态钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_nopin.py",
+  "file:docs/decisions/0013-nopin-not-wired.md",
+  "test:test_pool_nopin.py::test_dispatch_chain_never_names_merged_tokens",
+  "test:test_pool_nopin.py::test_usage_ingest_importers_stay_in_whitelist",
+  "test:test_pool_nopin.py::test_search_triplet_has_zero_consumers",
+  "test:test_pool_nopin.py::test_adr_exists_and_passes_machine_check",
+]
+gaps = "- 判据 2② 今天只能是「子集 + 必含 `tools/pool_mcp.py`」，不是卡规格字面的相等：`tools/pipeline_view.py` 至今零 import `usage_ingest`（A392 未落），按字面写必红且红的原因是隔壁卡。A392 落地后收紧成相等是一行改动，但必须有人去改。指针 `tests/test_pool_nopin.py`。- 白名单第二项是照 A392 卡规格钉的计划，不是照代码钉的事实：代码里 `pipeline_view` 还不消费 `merged_tokens`。指针 `docs/decisions/0013-nopin-not-wired.md`。- `reported_summary` 全仓不存在（`tools/pool/usage_ingest.py` 0 次、全仓 import 0 次），只作为禁名出现；ADR 把它写成九个名字里的第 9 个，而卡规格只列了 8 个。指针 `docs/decisions/0013-nopin-not-wired.md`。"

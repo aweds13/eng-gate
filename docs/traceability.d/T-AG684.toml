@@ -1,0 +1,15 @@
+[entries."T-AG684"]
+id = "T-AG684"
+title = "F43读端三模块判死：库留着消费者钉死，成文条款加静态钉子"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_nopin.py",
+  "file:docs/decisions/0013-nopin-not-wired.md",
+  "test:test_pool_nopin.py::test_dispatch_chain_never_names_merged_tokens",
+  "test:test_pool_nopin.py::test_usage_ingest_importers_stay_in_whitelist",
+  "test:test_pool_nopin.py::test_search_triplet_has_zero_consumers",
+  "test:test_pool_nopin.py::test_adr_exists_and_passes_machine_check",
+]
+gaps = "- 判据 2② 今天只能是「子集 + 必含 `tools/pool_mcp.py`」，不是卡规格字面的相等：`tools/pipeline_view.py` 至今零 import `usage_ingest`（A392 未落），按字面写必红且红的原因是隔壁卡。A392 落地后收紧成相等是一行改动，但必须有人去改。指针 `tests/test_pool_nopin.py`。- 白名单第二项是照 A392 卡规格钉的计划，不是照代码钉的事实：代码里 `pipeline_view` 还不消费 `merged_tokens`。指针 `docs/decisions/0013-nopin-not-wired.md`。- `reported_summary` 全仓不存在（`tools/pool/usage_ingest.py` 0 次、全仓 import 0 次），只作为禁名出现；ADR 把它写成九个名字里的第 9 个，而卡规格只列了 8 个。指针 `docs/decisions/0013-nopin-not-wired.md`。"
+
