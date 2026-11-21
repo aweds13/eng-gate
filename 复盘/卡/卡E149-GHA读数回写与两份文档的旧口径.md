@@ -52,7 +52,7 @@ job `135331686931`（head `cdb2c0fa`）与 job `135640738507`（head `14220c7c`�
 
 1. `docs/subsystems/ci/GitHub-Actions-云门禁.md`：§6 重写（读数换 190903a0、旧趟降级为对照）、§8.2 条数改 2793。
 2. `复盘/交接.d/T-AG680.md`：`:5` 加补注行；`复盘/交接-重构进度.md` 由 `tools/sync_docs.py` 现生成。
-3. 文书片段 `docs/changelog.d/T-AG682.md` / `docs/traceability.d/T-AG682.toml`：由 `tools/wb_stage_card.py` 现生成，**不许手写**。
+3. 两个文书片段（docs/changelog.d/T-AG682.md 与 docs/traceability.d/T-AG682.toml，**计划建**）：由 `tools/wb_stage_card.py` 现生成，不许手写。
 
 ## 验收（落地前自跑）
 
