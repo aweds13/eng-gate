@@ -320,3 +320,99 @@ grep -n "PORT 共" gates/diag/_magpie_scope.md         # 69 -> 68
 8. 本文所有行号实测于 `7a4cc513`；落卡时（`f7d4d305`）复核 `git diff --stat 7a4cc513..HEAD -- tools/pool/gateway.py tests/test_pool_gateway.py docs/subsystems/pool/模型与号池.md gates/diag/_magpie_scope.md` **输出为空**（R12）⇒ 行号仍有效。落地时若 HEAD 再前进，先跑同一条命令，**输出为空则行号仍有效**，不空就只重核它点到的文件。
 
 （本文件于 2026-11-20 由 `T-AG672` 物化自立卡草稿 `gates/diag/_draft_F10.md`；它就是卡规格本体，不是草稿。）
+
+## 落地回写（本笔，2026-11-20）
+
+工作树 `.wt/A384`（基准 `58dcbf1e`）。产品码 `tools/pool/gateway.py` **一个字节没动**
+（`git diff --stat` 里没有它；变异脚本收尾核 `sha256[:16]=c570cc73dd127def` 与变异前一致）。
+
+### 交付与读数（照抄）
+
+`git diff --stat`（卡树，两文件、纯追加）：
+
+~~~
+ docs/subsystems/pool/模型与号池.md |  27 ++++++++
+ tests/test_pool_gateway.py         | 125 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 152 insertions(+)
+~~~
+
+- `tests/test_pool_gateway.py`：1302 → **1427** 行；`grep -c '^def test_'` 79 → **85**（+6）。
+  六个新函数落点：`:708 test_responses_path_is_404_and_forwards_nothing`、
+  `:1331 test_chat_body_with_previous_response_id_reaches_forward_verbatim`、
+  `:1369 test_gateway_source_has_no_responses_semantics`、
+  `:1388 test_responses_protocol_has_no_endpoint_and_is_named`、
+  `:1400 test_f10_skip_is_written_into_the_model_doc`、
+  `:1416 test_alarm_responses_surface_stays_closed`；两个辅助
+  `:1347 _code_without_comments` / `:1356 _named_nodes`；判据表新增 6 行在 `:30-35`。
+- `docs/subsystems/pool/模型与号池.md`：170 → **197** 行，§8 从 `:172` 起；§1-§7 与 `:165-167` 未动。
+- 两份文件纯 CRLF 且以换行结尾（1427/1427、197/197）。
+
+验收五条（命令逐字取自上面「验收」段）：
+
+~~~
+# 1) 六条新判据
+6 passed, 103 deselected in 2.29s
+# 2) 整文件回归
+109 passed in 16.59s
+# 3) 没撞「同一份文档」的既有入库钉子
+2 passed, 64 deselected in 1.74s
+# 4) ruff
+All checks passed!   （第一版有 6 处 E501，全是新增行：判据表 5 行 + 段注释 1 行；
+                      按显示宽度压到 100 列内后为 0 —— 既有行一行没改）
+# 5) 主树 scope 表
+:18 = | F10 | previous_response_id 的内存态跟随 | SKIP_BY_REDLINE | — | 用户红线：无挂载点 …（含卡 A384 与 §8 指针）
+grep -c '^| .* | SKIP_BY_REDLINE |'  =>  5   （4 -> 5）
+grep -n 'PORT 共'  =>  :106  PORT 共 68 条 / SKIP_BY_REDLINE 5 条 / SKIP_NOT_APPLICABLE 23 条 / PORT 中 landed=yes 20、partial 22、no 26
+~~~
+
+判据 5 在 §8 写进文档**之前**必然红（实测 `1 failed, 108 passed`，唯一红的就是它），写完即绿 —— 与「已知噪音」一致。
+
+### 反向变异（重跑，不是起草时的读数）
+
+`gates/diag/_rev_384.py`（主树，gitignored）→ `gates/diag/_rev_384_result.txt`，末行
+`结论：4/4 条全部咬住，收尾绿。`。每条变异都真写盘、真跑 pytest、`finally` 还原并核 sha256：
+
+~~~
+BASELINE six_new rc=0 failed=[]        BASELINE sha256[:16]=c570cc73dd127def
+M1 咬住 判据 1=True 判据 6=True rc=1 restored=True   PATHS 末尾加 /v1/responses
+M2 咬住 判据 2=True rc=1 restored=True               转发前 replace 掉 previous_response_id
+M3 咬住 判据 3=True 判据 4=True rc=1 restored=True   endpoint_protocol 字典加 responses
+M4 安静（对） rc=0 restored=True                      只删注释里的六个字，判据 3 / 6 都不红
+AFTER restore six_new rc=0 failed=[]；邻域（含 http_only_four_paths）rc=0
+~~~
+
+M4 是判据 3 必须用 tokenize + AST 的存在理由：纯文本计数会把它算成红。
+
+### 三处与规格原文的偏差（照实文，不照规格）
+
+1. **既有测试数**：规格写「既有 72 条」，实为 **79 条**（`f7d4d305..58dcbf1e` 之间 A376 的 F36 在
+   `tests/test_pool_gateway.py` 加了 152 行）。既有 79 个函数**一行未改**，新增 6 条在其后追加。
+2. **§8 标题不带反引号、不带卡号后缀**：判据 5 断言的是逐字 `## 8. Responses 的 previous_response_id：不移植，原样透传`。
+   第一版给 `previous_response_id` 加了反引号、末尾挂「（卡 A384 · T-AG672）」，判据 5 当场红，已归一。
+3. **变异锚点必须按 LF 归一后再匹配**：`tools/pool/gateway.py` 是纯 CRLF，脚本里写的锚点是 LF 形态，
+   直接 `str.count` 数出 0（第一次跑就停手）。改成 `original.decode().replace("\r\n","\n")` 匹配、
+   回写时再 `.replace("\n","\r\n")`，并先校验「LF → CRLF 归一可逆」。这是脚本侧教训，不影响判据。
+
+### 「未坐实项」逐条落定
+
+1. **scope 表不能用 pytest 钉** —— 属实，已改为主树 `grep` 验收（上面第 5 条），读数如上。
+2. **`tools/pool/gateway.py:16-17` 自引用已漂** —— 仍未修（gateway.py 不在本卡域），登记不变。
+3. **scope 表 `:9` F1 行证据过时** —— 仍未修（本卡只许动 `:18` 与 `:106`），登记不变。
+4. **magpie 侧未编译、未跑 Go 测试** —— 仍未做；本卡所有 Go 语义仍是逐行读源码。
+5. **判据 3 的「全仓零」只是辅助证据** —— 属实：`test_gateway_source_has_no_responses_semantics`
+   只扫 `tools/pool/gateway.py`（扫全 `tools/` 会被 30 处 `prev*` 与 3 处 `response` 常量假红）。
+   全仓零仍由辅助 grep 承担，没进 pytest。
+6. **未验证真实上游对 `previous_response_id` 的反应** —— 仍未验证；`gateway.py:917` 明写
+   `chat_urls` 全空、生产上走不到 `forward_http`，本卡不碰这条。
+7. **探针与变异读数要重跑** —— 已重跑：本笔的 4/4 与「收尾绿」是本树本轮的实测，不是起草时的读数。
+8. **行号实测于 `7a4cc513`** —— 落卡前复核 `f7d4d305..58dcbf1e` 只动了 `tests/test_pool_gateway.py`
+   （+152），`gateway.py` 与 `模型与号池.md` 未变 ⇒ 规格里 `gateway.py:98/:99-104/:919` 与
+   文档 `:165-167` 的行号仍有效。
+
+### 诚实边界
+
+- **本笔没提交**：卡树里 `git status --porcelain` 只有两份被改文件，无 add / commit / stash / 切分支。
+- **没跑 `scripts/run_gates.py`**（本卡明令不跑）；上面五条是选测。
+- 主树只改 `gates/diag/_magpie_scope.md` 的 `:18` 与 `:106` 两行（gitignored，不入库），
+  外加 gitignored 的 `gates/diag/_rev_384.py` / `_rev_384_result.txt` / `_rev_384.log` 与若干 `_a384_*` 临时脚本。
+- **没做真机验证**：本轮所有「404 / 逐字节透传」都是本机桩（`_Stub`）读数，一个字节没出网。

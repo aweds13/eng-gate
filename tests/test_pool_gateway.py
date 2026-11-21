@@ -29,6 +29,13 @@ r"""号池网关（`tools/pool/gateway.py`，卡 E94 · T-AG603）的测试 —�
 | `test_f36_*`（六条） | F36：集合恰三值、路径恰四键、Host 与转发头不改答复、`null` 仍 403 |
 | `test_bare_ids_*`（六条） | F85：裸 id 行默认关、只认 `1`、追加行、撞名不列、裸名 404 |
 | `test_*disabled*` / `test_*pool*`（六条） | A383（F95）：三态、七键闭集、HTTP 面、池维度 |
+| `test_responses_path_is_404_and_forwards_nothing` | F10：`/v1/responses` 仍 404，零转发 |
+| `test_chat_body_with_previous_response_id_reaches_forward_verbatim` | F10：★ 交付物，原样转发 |
+| `test_gateway_source_has_no_responses_semantics` | F10：源码零 Responses 语义（tokenize + AST） |
+| `test_responses_protocol_has_no_endpoint_and_is_named` | F10：认不出 responses，也不翻译 |
+| `test_f10_skip_is_written_into_the_model_doc` | F10：§9 把「不移植 + 原样透传」写成了可核形态 |
+| `test_alarm_responses_surface_stays_closed` | F10：闹钟 —— 谁开 Responses 面它自己红 |
+
 
 ★ 全部用桩：`forward` 是注入的，`ledger` / `endpoints` / `rpm_limits` / `stamps` 都是参数，
   号池目录造在 `tmp_path` 里 —— **一个字节都不出网**，也不往真的 `gates/diag/` 写。
@@ -40,11 +47,13 @@ import ast
 import datetime as dt
 import http.client
 import inspect
+import io
 import json
 import os
 import subprocess
 import sys
 import threading
+import tokenize
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -748,6 +757,21 @@ def test_http_only_four_paths(start_server: Any) -> None:
         assert status == 404, path
     assert tuple(gateway.PATHS) == ("/v1/chat/completions", "/v1/messages",
                                     "/v1/models", "/v1/pool/routes"), "四条路径，一个都不多"
+
+
+def test_responses_path_is_404_and_forwards_nothing(start_server: Any) -> None:
+    """判据 1（卡 A384）：`/v1/responses` 仍是 404，且 404 的路径**一个请求都不转发**。
+
+    ★ 上一条 `test_http_only_four_paths` 只验了状态码，没验文案、也没验「没转发」——
+      网关先回 404 再偷偷转一次，那条照样绿。
+    """
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    payload = json.dumps({"model": MODEL, "previous_response_id": "resp_1"}).encode("utf-8")
+    status, _, body = _request(port, "POST", "/v1/responses", body=payload)
+    assert status == 404
+    assert "只有四条" in body.decode("utf-8"), body
+    assert stub.calls == []
 
 
 def test_http_origin_whitelist(start_server: Any) -> None:
@@ -1861,3 +1885,108 @@ def test_log_signature_takes_parts_not_body() -> None:
     assert set(params) == {"base", "caller", "model", "attempts", "served", "status",
                            "started_at", "parts"}
 
+# ======================================== F10：不移植，只钉原样透传（卡 A384）
+
+
+def test_chat_body_with_previous_response_id_reaches_forward_verbatim(start_server: Any) -> None:
+    """判据 2（卡 A384）：★ 本卡的交付物 —— chat body 带 Responses 的字段，逐字节到 forward。
+
+    ★「不移植」不等于「不支持」：调用方在 chat body 里写 previous_response_id / input / store，
+      网关一个字节都不碰，由上游自己认。谁在网关上「顺手删掉不认识的字段」，这条就红。
+    """
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    body = {"model": MODEL, "previous_response_id": "resp_1", "input": "hi", "store": False}
+    payload = json.dumps(body).encode("utf-8")
+    status, _, _ = _request(port, "POST", "/v1/chat/completions", body=payload)
+    assert status == 200
+    assert len(stub.calls) == 1
+    assert stub.calls[0][3] == payload, "网关改写了 payload：不移植 ≠ 改写"
+
+
+def _code_without_comments(source: str) -> str:
+    """去掉所有 COMMENT token 后的源码 —— 注释里写什么不算数，代码里写才算。"""
+    kept = []
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type != tokenize.COMMENT:
+            kept.append(token)
+    return tokenize.untokenize(kept)
+
+
+def _named_nodes(tree: ast.Module) -> list[str]:
+    """全部 Name / Attribute / 函数 / 类 / 方法的**标识符**（引用与定义都算）。"""
+    names: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.append(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.append(node.attr)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(node.name)
+    return names
+
+
+def test_gateway_source_has_no_responses_semantics() -> None:
+    """判据 3（卡 A384）：源码级零 Responses 语义 —— 只许注释提它，代码里一个都不许有。
+
+    ★ **必须 tokenize + AST，不许用 src.count(...)**：今天 /v1/responses 的纯文本计数 = 1，
+      就是 :98 那条注释。写成 count == 0 今天红；写成 <= 1 则「注释被改」假红、
+      「真加了代码」反而可能仍绿（反向变异 M4 就是这条写法的存在理由）。
+
+    ★ **只扫 tools/pool/gateway.py**：全 tools/ 会被 prev* 标识符与别的文件里含 response 的
+      字符串常量假红（卡规格 R8 的清单）。
+    """
+    source, tree = _gateway_source()
+    code = _code_without_comments(source)
+    assert "/v1/responses" not in code, "代码（不是注释）里出现了 /v1/responses"
+    responses = [c for c in _string_constants(tree) if "response" in c]
+    assert responses == [], responses
+    prevs = [name for name in _named_nodes(tree) if "prev" in name]
+    assert prevs == [], prevs
+
+
+def test_responses_protocol_has_no_endpoint_and_is_named() -> None:
+    """判据 4（卡 A384）：端点侧也认不出 responses，挑不到时点名「不做协议翻译」。
+
+    ★ 既有 test_pick_endpoint_never_guesses_from_base_url 只钉了 endpoint_protocol 那一半，
+      从没拿 "responses" 当协议名调过 pick_endpoint —— 这是新钉子。
+    """
+    assert gateway.endpoint_protocol("https://x.test/v1/responses") == ""
+    url, why = gateway.pick_endpoint((CHAT_URL,), "responses", platform="codearts")
+    assert url is None
+    assert "不做协议翻译" in why, why
+
+
+def test_f10_skip_is_written_into_the_model_doc() -> None:
+    """判据 5（卡 A384）：模型与号池.md 的 §9 把「F10 不移植」写成了可核形态。
+
+    ★ 这条是**交付投影的钉子**，不是现状钉子：§9 写进去之前它必然红（设计如此）。
+    ★ 只认「标题 + 判定 + 兜底形态 + 可核指针 + 钉子函数名」这几样，不锁行号、不数行 ——
+      文档改字号、加段落都不该让它红。
+    """
+    doc = (ROOT / "docs" / "subsystems" / "pool" / "模型与号池.md").read_text(encoding="utf-8")
+    assert "## 10. Responses 的 previous_response_id：不移植，原样透传" in doc
+    assert "SKIP_BY_REDLINE" in doc
+    assert "原样" in doc
+    assert "tools/pool/gateway.py:919" in doc
+    assert "test_chat_body_with_previous_response_id_reaches_forward_verbatim" in doc
+    assert "tests/test_pool_gateway.py" in doc
+
+
+def test_alarm_responses_surface_stays_closed() -> None:
+    """判据 6（卡 A384）：闹钟 —— 哪天有人开 Responses 面，这条自己红。
+
+    ★ 判据 1 只钉 HTTP 面（要起服务、要 404）；这条是同一件事的静态版本，连
+      「在 PATHS 里偷偷加一条但忘了改 404 文案」都能红。
+    ★ **不用 xfail**：xfail 是「预期失败」，这里是「预期它仍然关着」—— 关着就是绿。
+    """
+    assert "/v1/responses" not in gateway.PATHS
+    assert sorted(gateway.PATHS) == ["/v1/chat/completions", "/v1/messages",
+                                     "/v1/models", "/v1/pool/routes"]
+    # ★ 落地回写（2026-11-21）：起草时这里断言的是「PROTOCOL_ 常量恰好两个」。
+    #   卡 A372（F56 搜索 API 多 key 轮换）先落了，合法地加了 PROTOCOL_SEARCH
+    #   —— 那是**确实存在的一条协议**，不是偷偷开的 Responses 面。冻死数量会把
+    #   「别开 Responses」这条红线变成「别加任何协议」，所以改成钉**名字**：
+    assert "PROTOCOL_RESPONSES" not in dir(gateway)
+    assert not [k for k in dir(gateway) if "RESPONSE" in k.upper() and k.startswith("PROTOCOL_")]
+    assert gateway.endpoint_protocol("/v1/responses") == ""
