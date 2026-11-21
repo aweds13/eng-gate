@@ -7210,3 +7210,26 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E151"
+task = "T-AG686"
+title = "GHA五仓读数回写与骨架桩缺件"
+tree = ".wt/E151"
+spec = "复盘/卡/卡E151-GHA五仓读数与骨架桩缺件.md"
+files = [
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "scripts/cloud/gha/gate_profile.py",
+  "scripts/cloud/gha/profiles/engineering.toml",
+  "scripts/cloud/gha/build_snapshot.py",
+  "tests/test_gha_cloud_gate.py",
+  "docs/changelog.d/T-AG686.md",
+  "docs/traceability.d/T-AG686.toml"
+]
+depends = [
+  "E146",
+  "E148",
+  "E150"
+]
+risk = "mid"
+status = "pending"
