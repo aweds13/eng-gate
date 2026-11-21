@@ -1,0 +1,11 @@
+[entries."T-AG688"]
+id = "T-AG688"
+title = "收口：入口清单补GitHub权限层，GHA文档跟到最新那趟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "file:复盘/收口后待用户清单.md",
+]
+gaps = "- 清单新增的一栏（GitHub 权限层）只是**现状投影**：三条都卡在 token scope / 网页操作，机器侧没有自动解法，scope 一刷新这段就该删掉 —— 别留成永久欠账。判据面见 `tools/pool/limits.py` 之外的 `gh auth status`（仓外命令，无仓内真源），所以本页只能如实写「要你去点一下」。- GHA 文档 §6 换成了最新那趟（run 44930214907 / job 136924983162），但那一趟 `web_live` 是绿的 ⇒ 卡 E152 的症状兜底**在真 runner 上仍未被触发过**，证据只有仓内两条钉子 `tests/test_gate_summary_truthful.py` 与 `tests/test_web_live_timeout.py`；下一趟 `web_live` 真红才算现场验证。- §9 五仓表里除 eng-gate 外的四行仍是 2026-11-21 的读数，本轮没重取（不在这张卡的交付面）：`docs/subsystems/ci/GitHub-Actions-云门禁.md` §9。- 本卡只写文书，`scripts/` `tools/` `tests/` 一行未动；三道文档门读数：死指针 147（基线 147，+0）/ LAYER PASS / 派生文档双 OK，真源 `scripts/check_docs.py` 与 `docs/doc-debt-baseline.toml`。"
+

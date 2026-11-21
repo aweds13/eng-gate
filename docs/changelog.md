@@ -4,6 +4,10 @@
 - 根因：症状打在第 3 行、后面 61 条 `[OK ]` 子检查，收口又重打不带症状的同名 FAIL 行 ⇒ `mark_suspect_rows()` 读的 `summary + detail` 两处都没有「没等到」⇒ `SUSPECT` 在门级红上从未生效（三趟读数 `status` 全 `None`）。
 - 两条新钉子都是「改之前必红」：`tests/test_gate_summary_truthful.py`（1 条症状 + 60 条 `[OK ]` + 末行 `FAILED`）与 `tests/test_web_live_timeout.py`（旧代码连第三参都收不了，直接 `TypeError`）。
 - 文档 `docs/subsystems/ci/GitHub-Actions-云门禁.md`：§6 换成 head `3a5bc8cc` 的三趟、§9 eng-gate 行跟着换；旧读数全部降级成 §6.1 对照，一条没删。
+## 2026-11-22 T-AG688 收口：入口清单补 GitHub 权限层，GHA 文档跟到最新那趟
+- `复盘/收口后待用户清单.md` 末尾新增 `## GitHub 侧待你动手` 一节：G-1 删四个空仓/探针仓（`wf-scope-probe` / `fwprobe6` / `fwprobe5` / `python-`，`gh repo delete` 回 403 缺 `delete_repo`）、G-2 改 `.github/workflows/**` 需 `workflow` scope（deploy key 实测也绕不过）、G-3 `eng-gate` 转 public 可选（private 的 Windows 分钟计费）。另附「已经不需要你做的」与「五个仓各自在跑什么」两段。
+- `docs/subsystems/ci/GitHub-Actions-云门禁.md` §6 从上一趟三连换成最新那趟（run `44930214907` / job `136924983162`）：23 门、`not_run=[]`、红门 0、逐门秒求和 4893.61 s，job 墙钟 1377 s。同时写清「这一趟验的是症状兜底，而 `web_live` 是绿的 ⇒ 兜底没被触发」。
+- 旧读数一条不删，降级进 §6.1：前一 head 的三连（attempt 1 / 2 各红 `web_live`）、再往前四趟全绿、2026-11-19 两趟、最早的 22 绿 1 红。§9 五仓表的 eng-gate 行跟着换。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

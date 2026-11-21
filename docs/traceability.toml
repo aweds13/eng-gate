@@ -13096,3 +13096,14 @@ evidence = [
   "test:test_web_live_timeout.py::test_fail_without_symptom_keeps_the_bare_name",
 ]
 gaps = "1. 修的是「症状看不见」，不是 `web_live` 本身：抖不抖、要不要自动重试，这张卡一个字没改。红门仍是红门，`SUSPECT` 只是多一个标注（`gates_ok()` 照旧把它算红）。判据在 `scripts/run_gates.py` 的 `mark_suspect_rows()`。2. 症状进了 `gates/last.json` 的 `detail`，但 GHA 作业里那段 BEGIN/END JSON **仍然看不到它**：`scripts/cloud/gha/adapter.py` 的 `_reading()` 每门只搬七键（name / exit_code / seconds / blocking / status / reused / summary），`detail` 根本不在搬的名单里；要看症状只能看同一份日志的 `=== GHA-GATE-DOORLOG ===` 段。3. 本卡**没有重推 eng-gate**：「症状进 detail」这件事是在本机拿真 doorlog（GHA 上那两趟红门的输出，还原后 362 行）复现验证的，不是 runner 上重新跑出来的新读数。所以「下一趟 GHA 上 web_live 红时会带 `status=SUSPECT`」是推理，不是已观测事实。夹具在 `tests/test_gate_summary_truthful.py`。4. 顺手看见但没修：同一份 doorlog 上 `summarize()` 会挑中一行 JSONL 当摘要 —— `FAIL_SHAPES` 一条都没命中时它退到「最后一行 + [FAIL] 前缀」。适配器那边的 `_door_log_tail()` 早就丢掉以 `{` 开头的行，`scripts/run_gates.py` 主路径没有这道过滤。已写进 gaps，判据未改。"
+
+[entries."T-AG688"]
+id = "T-AG688"
+title = "收口：入口清单补GitHub权限层，GHA文档跟到最新那趟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "file:复盘/收口后待用户清单.md",
+]
+gaps = "- 清单新增的一栏（GitHub 权限层）只是**现状投影**：三条都卡在 token scope / 网页操作，机器侧没有自动解法，scope 一刷新这段就该删掉 —— 别留成永久欠账。判据面见 `tools/pool/limits.py` 之外的 `gh auth status`（仓外命令，无仓内真源），所以本页只能如实写「要你去点一下」。- GHA 文档 §6 换成了最新那趟（run 44930214907 / job 136924983162），但那一趟 `web_live` 是绿的 ⇒ 卡 E152 的症状兜底**在真 runner 上仍未被触发过**，证据只有仓内两条钉子 `tests/test_gate_summary_truthful.py` 与 `tests/test_web_live_timeout.py`；下一趟 `web_live` 真红才算现场验证。- §9 五仓表里除 eng-gate 外的四行仍是 2026-11-21 的读数，本轮没重取（不在这张卡的交付面）：`docs/subsystems/ci/GitHub-Actions-云门禁.md` §9。- 本卡只写文书，`scripts/` `tools/` `tests/` 一行未动；三道文档门读数：死指针 147（基线 147，+0）/ LAYER PASS / 派生文档双 OK，真源 `scripts/check_docs.py` 与 `docs/doc-debt-baseline.toml`。"
