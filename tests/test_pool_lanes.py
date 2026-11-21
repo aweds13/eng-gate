@@ -29,6 +29,11 @@ r"""每账号并发闸的测试 —— 八条钉子（卡 A339 · T-AG541）。
 
 ★ 一律用 `TF_POOL_REGISTRY` 指临时目录 —— **不往真的 `gates/diag/` 里写**；
 上限一律用 `monkeypatch` 灌进去（不依赖仓库那份文件当下的数值，也只测本卡加的这条闸）。
+
+★ 卡 A388（T-AG676，判 SKIP_BY_REDLINE）追加七条钉子 ⑨–⑮：签名里永远没有 `wait`、`queue` 只改文案、
+  闸链上没有定时器 / 线程 / 自旋、越界只炸不 clamp、全仓只剩两行 queue_wait、派活器没有 wait 开关、
+  shipped 的 lanes.toml 不排队。它们钉的是「**没有**排队 / 没有等待」这件事本身 ——
+  队列这一层按本仓纪律不移植（`tools/pool/guards.py` 守卫⑥ 与 `tools/pool/gateway.py:11`）。
 """
 
 from __future__ import annotations
@@ -289,3 +294,255 @@ def test_reverse_lane_guard_counts_dead_leases(reg: Path, quiet_lock: None,
     assert entry["account"] == ACCOUNT
     assert [r["card"] for r in registry.load(reg)] == ["320"], (
         "死租约没被清掉 ⇒ 它们会被算在途，号被静默锁死")
+
+# ================================================================ ⑨ 签名里永远没有 wait
+
+
+def test_lane_guard_signature_never_takes_wait() -> None:
+    """钉子⑨：`lane_guard` 的签名里**永远**没有 `wait` —— 本卡判 SKIP_BY_REDLINE，不落等待。
+
+    ★ 故意坏掉会红：给 `lane_guard` 加一个 `wait: int = 0` 形参（哪怕函数体里根本不用它）⇒
+      `sorted(params)` 与关键字参数集合都对不上；改成 `**kwargs` 偷偷接一个 ⇒ `VAR_KEYWORD`
+      断言失败；改成 `*args` ⇒ `VAR_POSITIONAL` 断言失败。
+    """
+    import inspect
+
+    params = inspect.signature(guards.lane_guard).parameters
+    assert sorted(params) == ["account", "limit", "now", "queue", "reservations"], (
+        f"签名变了：{sorted(params)} —— 这张卡不许给闸加 wait")
+    assert [n for n in params if "wait" in n.lower()] == [], (
+        f"签名里出现了 wait：{sorted(params)}")
+    assert all(p.kind is not inspect.Parameter.VAR_KEYWORD for p in params.values()), (
+        "不许用 **kwargs 兜住一个 wait")
+    assert all(p.kind is not inspect.Parameter.VAR_POSITIONAL for p in params.values()), (
+        "不许用 *args 兜住一个 wait")
+    kw_only = {n for n, p in params.items() if p.kind is inspect.Parameter.KEYWORD_ONLY}
+    assert kw_only == {"limit", "queue", "now"}, f"关键字参数变了：{sorted(kw_only)}"
+
+
+# ================================================================ ⑩ queue 只改文案
+
+
+def test_lane_guard_queue_only_changes_wording() -> None:
+    """钉子⑩：`queue > 0` 与 `queue == 0` 的**判据完全相同**，只多一句「队列上限 q 张」。
+
+    ★ 这就是「没有排队」这件事的可判形态：`queue` 只在文案里出现，不许改变咬 / 不咬，
+      也不许在没满的时候提前咬（「先排上队再派」）。
+    ★ 故意坏掉会红：把 `queue` 写进判据（例如 `if running < limit + queue: return []`）⇒
+      满员时 `queue=1` 就不咬了 ⇒ `len(queued) == 1` 失败；queue=0 的文案里也带上
+      「队列上限」⇒「不含」那条断言失败。
+    """
+    live = [_res(card="100"), _res(card="101")]
+    plain = guards.lane_guard(ACCOUNT, live, limit=2, now=NOW)
+    assert len(plain) == 1, f"没到上限？{plain}"
+    assert "队列上限" not in plain[0], f"queue=0 的文案不该提队列：{plain[0]}"
+
+    for queue in (1, 5, 100):
+        queued = guards.lane_guard(ACCOUNT, live, limit=2, queue=queue, now=NOW)
+        assert len(queued) == len(plain) == 1, f"queue={queue} 改了判据：{queued}"
+        assert queued[0].replace(f"，队列上限 {queue} 张", "") == plain[0], (
+            f"queue={queue} 改的不只是一句文案：{queued[0]}")
+
+    # 没满员时 queue 一点作用都不起（不许「还有位子也让人排队等」）
+    assert guards.lane_guard(ACCOUNT, live[:1], limit=2, queue=100, now=NOW) == []
+
+
+# ================================================================ ⑪ 闸链上没有定时器 / 线程 / 自旋
+
+
+def test_chain_has_no_timer_thread_or_spin() -> None:
+    """钉子⑪：并发闸这条链上**没有**定时器 / 后台线程 / 协程等待 / 自旋。
+
+    ★ 三个文件（lanes / guards / registry）的 `ast.While` 必须为空 —— 它们是「判一下」的纯判据，
+      一旦出现 `while True: sleep(...)` 就是进程内自旋，正是本卡判 SKIP_BY_REDLINE 不移植的东西。
+    ★ 四个文件里都不许出现 sleep / Timer / Thread / create_task / gather / wait 这类调用；
+      lanes 与 guards 还**不许 import** time / threading / asyncio / sched / concurrent / signal。
+    ★ `tools/pool/gateway.py` 有两处 `while`（`:963` `_iter_stream` 读 chunk、`:1046`
+      `read_body` 读 body），那是 HTTP 响应体的 I/O 循环，不是自旋 ⇒ 对它只查调用面。
+    ★ 故意坏掉会红：guards 里 `import time` + `time.sleep(0.1)`（卡规格判据 6 的反向变异 (c)）；
+      或者起一个 `threading.Timer(...)` 当「到点重试」；或者把闸写成 `while True:` 轮询。
+    """
+    import ast
+
+    banned = {"sleep", "setitimer", "alarm", "Timer", "Thread", "create_task", "gather",
+              "run_until_complete", "wait", "wait_turn", "select", "poll"}
+
+    def _calls(tree: ast.AST) -> list[tuple[int, str]]:
+        out: list[tuple[int, str]] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                if name in banned:
+                    out.append((node.lineno, name))
+        return sorted(out)
+
+    def _imports(tree: ast.AST) -> set[str]:
+        out: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                out.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                out.add(node.module.split(".")[0])
+        return out
+
+    trees: dict[str, ast.AST] = {}
+    for name in ("lanes", "guards", "registry", "gateway"):
+        path = ROOT / "tools" / "pool" / f"{name}.py"
+        trees[name] = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+    for name in ("lanes", "guards", "registry"):
+        whiles = [n.lineno for n in ast.walk(trees[name]) if isinstance(n, ast.While)]
+        assert whiles == [], f"tools/pool/{name}.py 里出现了 while（自旋 / 定时器）：行 {whiles}"
+        assert _calls(trees[name]) == [], (
+            f"tools/pool/{name}.py 里有等待类调用：{_calls(trees[name])}")
+
+    spin_modules = {"time", "threading", "asyncio", "sched", "concurrent", "signal"}
+    for name in ("lanes", "guards"):
+        leaked = sorted(_imports(trees[name]) & spin_modules)
+        assert leaked == [], f"tools/pool/{name}.py 引了等待用的模块：{leaked}"
+
+    assert _calls(trees["gateway"]) == [], (
+        f"tools/pool/gateway.py 里有等待类调用：{_calls(trees['gateway'])}")
+
+
+# ================================================================ ⑫ 越界只炸，绝不 clamp
+
+
+def test_lanes_bounds_are_checked_but_never_clamped(tmp_path: Path) -> None:
+    """钉子⑫：`wait` / `queue` / `limit` **越界就炸**，而且**不夹**到上界。
+
+    ★ 为什么这条是硬判据：clamp = 把 `wait = 3601` 悄悄读成 3600，等于「判不出来就往宽松处改」，
+      正是本仓最忌的那件事。卡规格判据 4：3601 必抛 `LanesError`，而 3600 读回来**原样**是 3600。
+    ★ 故意坏掉会红：把 `_as_lane` 里三处 `raise LanesError(...)` 换成
+      `wait = min(wait, MAX_QUEUE_WAIT)` ⇒ `pytest.raises` 不成立；把边界值也当成越界（`>=`）⇒
+      「边界原样读回」那条失败。
+    """
+    good = tmp_path / "good.toml"
+    good.write_text("[default]\nlimit = 1000\nqueue = 10000\nwait = 3600\n", encoding="utf-8")
+    edge = lanes.load_lanes(good)[lanes.DEFAULT_SECTION]
+    assert (edge.limit, edge.queue, edge.wait) == (
+        lanes.MAX_LIMIT, lanes.MAX_QUEUE_LIMIT, lanes.MAX_QUEUE_WAIT), (
+        f"边界值被夹了：{(edge.limit, edge.queue, edge.wait)}")
+
+    # 中间值原样读回（不夹成 0、也不夹成上界）
+    mid = tmp_path / "mid.toml"
+    mid.write_text('[default]\nwait = 1800\nqueue = 7\n[accounts."codearts-1"]\nwait = 42\n',
+                   encoding="utf-8")
+    loaded = lanes.load_lanes(mid)
+    assert (loaded[lanes.DEFAULT_SECTION].wait, loaded[lanes.DEFAULT_SECTION].queue) == (1800, 7)
+    assert loaded["codearts-1"].wait == 42
+
+    # 越界一个 1 也必须炸，而且报的是**原值**（不是夹完的值）
+    over = tmp_path / "over.toml"
+    over.write_text(f"[default]\nwait = {lanes.MAX_QUEUE_WAIT + 1}\n", encoding="utf-8")
+    with pytest.raises(lanes.LanesError) as exc:
+        lanes.load_lanes(over)
+    assert str(lanes.MAX_QUEUE_WAIT + 1) in str(exc.value), (
+        f"报错里应当是原值：{exc.value}")
+
+    for body in (f"[default]\nqueue = {lanes.MAX_QUEUE_LIMIT + 1}\n",
+                 f"[default]\nlimit = {lanes.MAX_LIMIT + 1}\n",
+                 f"[accounts.\"codearts-1\"]\nwait = {lanes.MAX_QUEUE_WAIT + 1}\n"):
+        over.write_text(body, encoding="utf-8")
+        with pytest.raises(lanes.LanesError):
+            lanes.load_lanes(over)
+
+
+# ================================================================ ⑬ 全仓只剩两行 queue_wait
+
+
+def test_only_two_queue_wait_mentions_in_repo() -> None:
+    """钉子⑬：全仓只有两行提到 queue_wait，**没有第二个消费者把 wait 当真**。
+
+    今天的两行（`grep -rn 'QueueWait|queue_wait' tools/ scripts/ --include=*.py`）：
+      · `tools/pool/lanes.py:41` —— 注释：「等多久的上界……留给下一张卡，本卡只做越界检查」；
+      · `tools/pool/landing.py:2601` —— `merge_queue.wait_turn(a.task, timeout=a.queue_wait, ...)`。
+
+    ★ 为什么放行 landing.py:2601：它排的是**落地合并队列**（`tools/pool/queue.py` 的 `wait_turn`），
+      不是每 key 并发闸；卡规格「不许做」第 4 条明确不许动它。这一条断言它确实还是那句
+      `wait_turn(`，而不是被悄悄改成第二处闸。
+    ★ 故意坏掉会红：在 `registry.reserve` 或 `gateway` 的换号循环里加一个 `queue_wait` 消费者
+      ⇒ 命中数变 3 ⇒ 报错里逐条点名。
+    """
+    import re
+
+    pattern = re.compile(r"QueueWait|queue_wait")
+    hits: list[tuple[str, int, str]] = []
+    for sub in ("tools", "scripts"):
+        for path in sorted((ROOT / sub).rglob("*.py")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if pattern.search(line):
+                    hits.append((path.relative_to(ROOT).as_posix(), lineno, line.strip()))
+
+    assert len(hits) == 2, f"queue_wait 的消费者多出来了（或少了）：{hits}"
+    assert [h[0] for h in hits] == ["tools/pool/landing.py", "tools/pool/lanes.py"], (
+        f"命中集变了：{[h[0] for h in hits]}")
+    lanes_hit = next(h for h in hits if h[0] == "tools/pool/lanes.py")
+    landing_hit = next(h for h in hits if h[0] == "tools/pool/landing.py")
+    assert lanes_hit[2].startswith("#"), f"lanes.py 那行应当只是注释：{lanes_hit}"
+    assert "wait_turn(" in landing_hit[2] and "a.queue_wait" in landing_hit[2], (
+        f"landing.py 那行应当是落地合并队列的 wait_turn（不是第二处闸）：{landing_hit}")
+
+
+# ================================================================ ⑭ 派活器上没有 wait 开关
+
+
+def test_dispatch_surface_has_no_wait_switch() -> None:
+    """钉子⑭：派活器的命令行上**没有** `--wait` / `--queue` 这种开关。
+
+    ★ 唯一名字里带 wait 的是 `--quota-wait`（默认 300 秒）：那是「撞 429 先等几秒再探」的额度退避，
+      与 F22 的槽位排队无关 —— 卡规格判据 5 说的「全仓无第二个消费者」在派活器这一侧就是它。
+    ★ 故意坏掉会红：`build_parser()` 里加一个 `--wait`（或 `--lane-wait` / `--queue`）⇒
+      开关集合对不上；把 `--quota-wait` 的默认值从 300 改掉 ⇒ 那条数值断言失败。
+    ★ 这条只读 `tools/wb_dispatch.py` 的**参数面**（不 grep 全文）：那个文件自己就有
+      `time.sleep(backoff)`（认证探针退避）与 `threading.Thread`（日志泵），那不是闸链。
+    """
+    import argparse
+
+    import wb_dispatch
+
+    parser = wb_dispatch.build_parser()
+    actions = list(parser._actions)
+    subs = [a for a in actions if isinstance(a, argparse._SubParsersAction)]
+    assert subs == [], "派活器长出了子命令 ⇒ 这条用例只看得见顶层开关，得跟着改"
+
+    hits = [a for a in actions
+            if any(key in opt.lower() for opt in a.option_strings for key in ("wait", "queue"))]
+    assert [a.option_strings for a in hits] == [["--quota-wait"]], (
+        f"派活器上多了等待开关：{[a.option_strings for a in hits]}")
+
+    only = hits[0]
+    assert only.dest == "quota_wait"
+    assert only.default == wb_dispatch.DEFAULT_QUOTA_WAIT == 300, (
+        f"--quota-wait 的默认值变了：{only.default}")
+    assert "429" in (only.help or ""), (
+        f"--quota-wait 讲的是额度 429 退避，不是槽位排队：{only.help}")
+
+
+# ================================================================ ⑮ shipped 的 lanes.toml 不排队
+
+
+def test_shipped_lanes_toml_does_not_queue() -> None:
+    """钉子⑮：仓库里那份 `lanes.toml` **没有开排队** —— 每一段的 `queue` / `wait` 都是 0。
+
+    ★ 为什么要在仓库真文件上钉：`queue = 5` 写进去虽然今天「只进文案」，但它会让下一个读配置的人
+      以为排队已经做完了 —— 本卡判 SKIP_BY_REDLINE，配置必须诚实地写着「不排队」。
+    ★ 故意坏掉会红：把 `[default]` 的 `queue` 改成 5（或加一个 `[accounts."codearts-1"]` 段
+      写着 `wait = 30`）⇒ 下面两条断言失败。
+    """
+    repo_file = lanes.lanes_path()
+    assert repo_file.exists(), f"仓库里那份 lanes.toml 不见了：{repo_file}"
+
+    text = repo_file.read_text(encoding="utf-8")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        effective = line.split("#", 1)[0].strip()
+        if effective.startswith(("queue", "wait")):
+            value = effective.split("=", 1)[1].strip()
+            assert value == "0", f"shipped 的 lanes.toml 第 {lineno} 行开了排队：{line.strip()}"
+
+    loaded = lanes.load_lanes()
+    assert loaded, "仓库里的 lanes.toml 读成了空字典 ⇒ 这条闸等于没配"
+    for name, lane in loaded.items():
+        assert (lane.queue, lane.wait) == (0, 0), f"第 [{name}] 段开了排队：{lane}"

@@ -80,6 +80,10 @@
 - tools/pool_mcp.py（+1 行）：把路径表传给 build_server。
 - 新建 tests/test_pool_mcp_http_paths.py（282 行 6 测）：同名路径各自上限、未知路径拒绝、GET 仍 405、超限 413 文案仍单一来源。
 - 传输面开工前实测过：POST /nope 原先 200 并执行、GET /nope 405 + Allow: POST —— 本卡把「未知路径照样执行」这一条修掉。
+## 2026-11-20 T-AG676 F22 并发闸的排队：判 SKIP_BY_REDLINE，只钉「不排队」
+- 判据：magpie 的 QueueWait 这一层（等槽、排队位次、queue 上限真排队）与 gate_lock 的「不许后台定时器」红线相撞 ⇒ 不落新行为，只把「没有排队」写成可复核的钉子。
+- tests/test_pool_lanes.py 291→548 行、8→17 用例：新增七条钉子（签名不许有 wait、queue 只改文案、闸链零 sleep/线程/协程、wait/queue 不夹且越界必抛、全仓 queue_wait 恰两处、wb_dispatch 无 --wait、仓库 lanes.toml 三零）。
+- tools/pool/guards.py 480→487 行只加 docstring（越界必抛、不夹、不排队），tools/pool/lanes.toml 45→48 行补三段注释；产品行为逐字节不变。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

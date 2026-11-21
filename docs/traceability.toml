@@ -12906,3 +12906,18 @@ evidence = [
   "file:复盘/卡/卡A378-F59三个自带MCP-server-按路径挂载.md",
 ]
 gaps = "1. README 的逐文件行数会漂：tools/pool/mcp_http.py 从 406 行变 474 行，docs/subsystems/pool/README.md 是现算文档、本卡不手改它，落地链 ③.5 会自己重算（工人实测 --check 红 3 行）。指针 scripts/gen_pool_readme.py2. 路径上限只到「每条路径各自一个上限」：magpie 的 hubSep/hubIdle 那一层不搬（另判 SKIP 见卡 A379），本卡不引入跨路径的共享状态。指针 tools/pool/mcp_http.py3. 413 的文案仍只有一个来源：三条路径共用一个 max_bytes 时文案一字不差，本卡加的只是「每条路径可各自给上限」，没有为每条路径写各自的话。指针 tools/pool/mcp_http.py"
+
+[entries."T-AG676"]
+id = "T-AG676"
+title = "F22并发闸排队：判SKIP_BY_REDLINE，只钉不排队与零定时器"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tests/test_pool_lanes.py",
+  "file:tools/pool/guards.py",
+  "file:tools/pool/lanes.toml",
+  "test:test_pool_lanes.py::test_chain_has_no_timer_thread_or_spin",
+  "test:test_pool_lanes.py::test_lane_guard_signature_never_takes_wait",
+  "test:test_pool_lanes.py::test_only_two_queue_wait_mentions_in_repo",
+]
+gaps = "1. 这张卡钉的是「不排队」这件事**不存在**：判据全是零命中扫描 + 签名白名单，能证明今天闸链上没有 sleep/线程/协程、没有 wait 形参，但证明不了「将来该不该有」。哪天有人真要排队，这组钉子只会红，不会告诉他该怎么判。指针 tests/test_pool_lanes.py2. 判据 5 放行了 `tools/pool/landing.py:2601` 的 merge_queue.wait_turn —— 同名不同物（落地合并队列），断言里写了理由但那是**文字口径**，将来 landing.py 真加了「按 key 等槽」也扫不出来。指针 tools/pool/landing.py3. `tools/pool/lanes.py` 一字节未改：越界必抛、不夹、上界常量全由 tests 侧覆盖 ⇒ 源码里没有一行能自证「不排队」，全靠测试文件。指针 tools/pool/lanes.py"

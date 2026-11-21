@@ -363,6 +363,13 @@ def lane_guard(account: object, reservations: Iterable[dict], *, limit: int,
       `queue > 0` 时判据与 `queue == 0` **完全相同**（都按 `limit` 判），只在文案里多一句
       "队列上限 q 张" —— 绝不写 `while True: sleep`。
 
+    ★ 卡 A388（台账号 T-AG676）判 **SKIP_BY_REDLINE**：magpie 那条真队列（进不去就在进程里
+      等位子）**不移植** —— 进程内自旋 / 后台线程定时器都违反本模块"纯函数"与
+      `tools/pool/gateway.py:11`"不做定时器"的规矩，把等待挪进租约层又会破坏
+      `tools/pool/registry.py`"判不出来就不动手"的口径。所以这里**没有** `wait` 形参、
+      也不会有：`tests/test_pool_lanes.py` 的钉子⑨–⑮ 钉的就是"没有排队"这件事本身
+      （签名无 wait、queue 只改文案、闸链无定时器 / 线程 / 自旋、越界只炸不 clamp）。
+
     ★ 纯函数：不读文件 / 不读环境 / 不 `print` / 不起进程（同模块另四条的规矩）。
       `limit` / `queue` 是调用方从 `pool.lanes` 读好之后传进来的整数 —— 本模块不碰 TOML。
     """
