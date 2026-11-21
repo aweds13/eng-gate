@@ -118,6 +118,11 @@
 - **一行解压代码都没有**：不 import gzip / zlib / zstandard / compression / brotli；`MAX_BODY_BYTES`（32 MiB）、411 / 413 / 400 三条文案、Content-Type 校验一字不动。
 - `tests/test_pool_gateway.py` 1326→1456 行、加 8 条钉子：非 identity 七个取值一律 415、415 不读体（声明 100000 字节零发送）、identity/空值行为不变、415 不是第七个 kind、零压缩库零解压、上限与 413 不动、Content-Type 不校验、无令牌 + gzip ⇒ 401。
 - `docs/subsystems/pool/README.md` 表 B 加第 8 行「不做解压」；生成区由 `scripts/gen_pool_readme.py` 现算重写。
+## 2026-11-20 T-AG663 F82 远端 provider 显式登记：连不上就点名机器、当场停手不换号
+- tools/pool/platforms.toml 新增 [platform.remote-magpie] 一段（八项齐全：remote / auth_kind / token_env / base_urls 空 / chat_urls 恰一条 / source 可追溯 / verified）；其余九段一字未动。
+- tools/pool/gateway.py 四处：forward_http 连接层失败文案带 urlsplit(url).netloc；新增 _remote_platforms() 与 _is_connect_failure()；route_once 加默认 None 的 remote=，远端连接层失败当场 break；__all__ 加 CONNECT_FAILED。
+- 新增 tests/test_pool_gateway_remote.py（326 行 12 测，11 passed + 1 xfailed）：远端失败 fwd.calls == 1，本地同形状 502 仍 calls == 2 —— 分支只对远端生效。
+- tests/test_pool_gateway.py 只动授权那一处（9→10 + docstring + 循环跳过远端段）；modules.toml 两条 duty 改写。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

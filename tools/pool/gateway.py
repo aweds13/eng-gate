@@ -71,15 +71,16 @@ from pool import rpm as pool_rpm  # noqa: E402
 from pool import sink as pool_sink  # noqa: E402
 
 if TYPE_CHECKING:  # pragma: no cover —— 只为类型注解（ruff TCH）
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Collection, Iterable, Sequence
     from typing import Any
 
 __all__ = [
-    "ALLOWED_HOSTS", "Attempt", "BARE_IDS_ENV", "BodyTooLarge", "CHUNK_BYTES",
+    "ALLOWED_HOSTS", "Attempt", "BARE_IDS_ENV", "BodyTooLarge", "CONNECT_FAILED", "CHUNK_BYTES",
     "ConfigError", "DEFAULT_HOST", "DEFAULT_PORT", "DEFAULT_PROTOCOL", "KINDS",
     "MAX_BODY_BYTES", "Outcome", "Reply", "ORIGINS_ENV", "REQUIRE_ORIGIN_ENV", "TOKEN_ENV",
     "bare_ids_from_env", "bearer_ok", "build_server", "classify", "check_host",
     "endpoint_protocol", "forward_http", "list_models", "main", "parse_retry_after",
+
     "pick_endpoint", "require_origin_from_env", "resolve_token", "route_once", "serve_http",
     "split_origins",
 ]
@@ -116,6 +117,9 @@ PATHS: dict[str, tuple[str, str]] = {
 }
 #: 逐跳头：上游的值不许原样带出去（Length / 连接语义归本服务自己管）。
 HOP_HEADERS = frozenset({"content-length", "transfer-encoding", "connection", "keep-alive"})
+#: 连接层失败的文案标记（卡 A375 判据 3a）：后面必须跟机器名（`urlsplit(url).netloc`）。
+#: ★ 只有这一处拼法、只有一处读法（`_is_connect_failure`）—— 文案是判据，不许在两处漂。
+CONNECT_FAILED = "上游连不上"
 
 
 class ConfigError(ValueError):
@@ -637,6 +641,7 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
                protocol: str = PROTOCOL_CHAT, routing: str = "order", body: bytes = b"",
                now: dt.datetime | None = None, root: Path | str | None = None,
                endpoints: Mapping[str, Sequence[str]] | None = None,
+               remote: Collection[str] | None = None,
                rpm_limits: Mapping[str, int] | None = None,
                stamps: Mapping[str, Sequence[dt.datetime]] | None = None,
                reservations: Sequence[Mapping[str, Any]] = (),
@@ -661,6 +666,9 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
       `Outcome.stop_reason`。聊天路径的换号语义**一个字节不动**（立卡人裁决 1）。
     ★ `turns` 是 `rotate` 的轮转计数，**由调用方持有**（服务端就是 `_Server.turns`）；
       不传 ⇒ 每次从头算 ⇒ rotate 恒等（这就是本卡要修的那个缺口，别把默认值当正常路径）。
+      · **远端平台 + 连接层失败 ⇒ 当场停**（卡 A375 判据 3b）：同一个地址拿 N 个号去问
+        就是把 120 秒超时乘 N，换号也不会让它连上 —— 落 502 并点名那台机器
+
     """
     base = _base_root(root)
     clock = now if isinstance(now, dt.datetime) else dt.datetime.now(dt.timezone.utc)
@@ -680,6 +688,7 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
                      f"没有可用的号：{detail}")
 
     endpoints = endpoints if endpoints is not None else _platform_endpoints()
+    remote_set = frozenset(remote) if remote is not None else _remote_platforms()
     rpm_map = dict(rpm_limits) if rpm_limits is not None else pool_rpm.load_rpm()
     stamp_map = dict(stamps) if stamps is not None else pool_rpm.read_stamps(root=base)
     lanes_map = pool_lanes.load_lanes()
@@ -764,6 +773,10 @@ def route_once(*, pool: str, model: str, caller: str, forward: Forward,
                 # ⇒ 换下一个 key（magpie search_keys.go:62-76 把 tavily 432/433 算余额耗尽）。
                 continue
             break  # 不换号：换号也装不下 / 是请求本身不对，原样透传
+        if platform in remote_set and _is_connect_failure(reply):
+            # 远端 + 连接层失败 ⇒ 当场停（卡 A375 判据 3b）：换号不会让它连上，
+            # 只会把同一个 120 秒超时再乘一遍。文案里已经点名了那台机器。
+            break
         continue  # server / other ⇒ 换下一个号，不降权
 
     return _exhausted(protocol, base=base, caller=caller, model=model, attempts=attempts,
@@ -896,6 +909,29 @@ def _platform_endpoints() -> dict[str, list[str]]:
         urls = row.get("chat_urls") if isinstance(row, dict) else None
         out[str(name)] = [str(u) for u in (urls or [])]
     return out
+
+
+def _remote_platforms() -> frozenset[str]:
+    """读 platforms.toml 的 `remote` 布尔：哪些平台**在另一台机器上**（卡 A375 / F82）。
+
+    只认显式的 `remote = true`，**缺键就是本地**（不猜、不按 URL 形状推断：地址长得像
+    远端不算数 —— 「远端」是一个要写进表的事实，不是从字符串里读出来的猜测）。
+    """
+    table = pool_accounts.load_platforms()
+    return frozenset(str(name) for name, row in table.items()
+                     if isinstance(row, dict) and row.get("remote") is True)
+
+
+def _is_connect_failure(reply: Reply) -> bool:
+    """这次答复是不是**连接层**失败（没连上 / 超时），不是上游给了一个错。
+
+    判据是两个既有事实：status 502（forward_http 的连接层分支只回这个）且文案里有
+    `CONNECT_FAILED`。**不新增 kind**（七值闭集不许发明第八个）——
+    这里问的是「换个号还有没有意义」，不是「上游错在哪一类」。
+    """
+    if int(reply.status) != 502 or reply.streaming:
+        return False
+    return CONNECT_FAILED in reply.body.decode("utf-8", "replace")
 
 
 def _window_entries() -> list[pool_model_registry.ModelEntry]:
@@ -1033,7 +1069,7 @@ def list_models(*, root: Path | str | None = None,
             "note": "；".join(bit for bit in note_bits if bit)}
 
 
-# ------------------------------------------------- 真实转发（今天走不到：chat_urls 全空）
+# --------------------------------------------- 真实转发（卡 A375：远端段有端点，本地九段仍全空）
 
 
 def resolve_token(platform: str, *,
@@ -1082,7 +1118,7 @@ def _iter_stream(resp: Any) -> Iterable[bytes]:
 
 def forward_http(model: str, account: str, url: str, payload: bytes, *,
                  timeout: float = 120.0) -> Reply:
-    """真发一次上游请求。★ 今天 chat_urls 全空 ⇒ **生产上走不到这里，未真机验证**。
+    """真发一次上游请求。★ 本地九段 chat_urls 仍全空；远端段（卡 A375）**未真机验证**。
 
     只做同协议：payload 原样发（不改写 stream / 不搬家字段），回来的 SSE 直接给 chunks。
     """
@@ -1104,7 +1140,9 @@ def forward_http(model: str, account: str, url: str, payload: bytes, *,
         return Reply(status=int(exc.code), headers=dict(exc.headers or {}),
                      body=exc.read() or b"")
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        message = f"上游连不上：{exc}"
+        # 点名机器（卡 A375 判据 3a）：只说「连不上」等于没说**哪台**连不上。
+        where = urlsplit(str(url)).netloc or str(url)
+        message = f"{CONNECT_FAILED} {where}：{exc}"
         return Reply(status=502, headers={"Content-Type": "application/json; charset=utf-8"},
                      body=json.dumps({"error": {"type": "api_error", "message": message}},
                                      ensure_ascii=False).encode("utf-8"))

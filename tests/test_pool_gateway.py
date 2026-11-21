@@ -9,7 +9,7 @@ r"""号池网关（`tools/pool/gateway.py`，卡 E94 · T-AG603）的测试 —�
 | `test_classify_ignores_free_text` | 正文写「余额不足」/quota 字样**不算数**（不解析文案） |
 | `test_classify_is_pure` | 同输入同输出、不读环境变量、不写盘 |
 | `test_retry_after_zero_is_a_legal_value` | `Retry-After: 0` 合法（判空必须 `is not None`） |
-| `test_platform_table_chat_urls_all_empty` | 九平台各有一列 `chat_urls`，且全空 |
+| `test_platform_table_chat_urls_all_empty` | 十个平台各有一列 `chat_urls`；除远端段外全空 |
 | `test_empty_chat_urls_is_403_and_named` | 空 `chat_urls` ⇒ 403 + 点名没登记 chat 端点 |
 | `test_pick_endpoint_never_guesses_from_base_url` | 不许拿 base_url 猜端点；协议不符也不算 |
 | `test_dry_run_walks_the_whole_chain` | 干跑：候选 → 跳过 → 循环 → 落账，一个字节不出网 |
@@ -251,14 +251,16 @@ def test_retry_after_zero_is_a_legal_value() -> None:
 
 
 def test_platform_table_chat_urls_all_empty() -> None:
-    """九平台各有一列 `chat_urls`，且**全空**（空 = 没登记，不是不支持）。"""
+    """十平台各有一列 `chat_urls`；**除远端段（卡 A375）外全空**（空 = 没登记，不是不支持）。"""
     import tomllib
 
     text = (ROOT / "tools" / "pool" / "platforms.toml").read_text(encoding="utf-8")
     data = tomllib.loads(text)
     platforms = data["platform"]
-    assert len(platforms) == 9, sorted(platforms)
+    assert len(platforms) == 10, sorted(platforms)
     for name, row in platforms.items():
+        if name == "remote-magpie":
+            continue  # 卡 A375：唯一登记了端点的一段，细节由 test_pool_gateway_remote.py 钉
         assert "chat_urls" in row, name
         assert row["chat_urls"] == [], name
     assert "空 = 没登记，不是不支持" in text, "文件头要说清「空」是什么意思"

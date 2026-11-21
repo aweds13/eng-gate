@@ -1,0 +1,15 @@
+[entries."T-AG663"]
+id = "T-AG663"
+title = "F82远端provider显式登记：连不上就点名机器、当场停手不换号"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/platforms.toml",
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway_remote.py",
+  "test:test_pool_gateway_remote.py::test_remote_platform_is_registered_explicitly",
+  "test:test_pool_gateway_remote.py::test_remote_connect_failure_stops_after_one_seat",
+  "test:test_pool_gateway_remote.py::test_connect_failure_names_the_machine",
+]
+gaps = "1. 远端 provider 未真机验证：新段 verified=true 表示「显式登记、来源可追」，地址是示例域；真机地址没拿到也没接，forward_http 的 docstring 首行已写「远端段未真机验证」。指针 tools/pool/gateway.py2. 三块不移植：一址派生四 base、X-Magpie-Agent/Via 跨机身份、/v1/magpie/limit 与 quotas 远端配额转发 —— 各留一条闹钟钉，哪天被搬进来就红。指针 tests/test_pool_gateway_remote.py3. 卡规格判据 4 的 grep 原文要求 compare_digest 对 gateway.py 零命中，但它本来就有两处（docstring 与 hmac.compare_digest 实现）⇒ 该形状只对 platforms.toml 断言，gateway.py 只断言 sk-magpie 与 X-Magpie-。指针 tools/pool/platforms.toml"
+

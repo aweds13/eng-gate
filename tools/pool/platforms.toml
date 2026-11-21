@@ -15,9 +15,15 @@
 #   * 空数组 `[]` = **没登记**这个平台的 chat 端点，**不是**「不支持」——
 #     网关遇到空表一律 403 并点名「这个平台没登记 chat 端点」，绝不退化成
 #     「拿 base_urls 随便试一个」；
-#   * 表里这些平台大多是 IDE / 面板的凭据，没有公开的 chat 补全入口，所以现在**全是空的**；
+#   * 表里这些平台大多是 IDE / 面板的凭据，没有公开的 chat 补全入口，所以除下面那段
+#     远端 magpie 之外现在**全是空的**；
 #   * 填之前必须真机验证过（`verified = true` 且写明 `source`），
-#     否则填了也仍算 `verified = false`，网关不认。
+#     否则填了也仍算 `verified = false`，网关不认；
+#   * `remote = true`（卡 A375 / F82）**只**说明「这一段指的是另一台机器上的 provider」：
+#     我们只去连它（单向），不因此开监听口、不派生端点、不做跨机身份；
+#   * 一个远端段**只许一条** `chat_urls`：远端地址不许由一个根派生第二个端点
+#     （magpie 的 `remoteMagpieEndpoints`「剥后缀 + root+"/v1"」那一套本仓不移植）——
+#     多写一条就等于在表里写死了「猜」，与上一条「空表一律 403」自相矛盾。
 #
 # 各段可选的两个窗口键（卡 A370 —— magpie F28 只移植「判据」，不移植「节拍」）：
 #   * `reset_path`：这个平台的**只读额度响应**里，重置时刻所在的点分 JSON 路径
@@ -35,7 +41,7 @@
 
 [meta]
 schema = 1
-updated_at = "2026-11-19"
+updated_at = "2026-11-20"
 note = "端点与坑来自 gates/diag/repos/ref/ 的五个参考仓存档；本机只有 codearts / codebuddy 有真号。"
 
 # ---------------------------------------------------------------- codearts（华为云码道）
@@ -257,4 +263,27 @@ quota_flow = "无官方额度接口；429 表示额度或并发用尽（本机 c
 pitfalls = [
   "429 曾被 wb_dispatch/wb_watch 判成「退出码=0」⇒ 假绿；判决必须读 result.is_error/subtype（卡 E41）",
   "切换账号前必须先存快照，否则正在跑的实例会把旧号覆盖掉（infra/pool/codebuddy_accounts.py 已实现）",
+]
+
+# ---------------------------------------------------------------- remote-magpie（远端 provider，卡 A375 / F82）
+
+[platform.remote-magpie]
+label = "Magpie（远端 provider，另一台机器，单向连出）"
+supported = "quota"
+remote = true
+auth_kind = "bearer"
+probe = "manual"
+verified = true
+base_urls = []  # 裸根故意不登记：远端地址只许写完整端点，不许多一个可派生的根（见文件头）
+chat_urls = [
+  "https://magpie.example.test:3425/v1/chat/completions",
+]
+token_env = "TF_POOL_REMOTE_MAGPIE_TOKEN"
+source = "github:yetone/magpie/internal/gateway/gateway.go:799"
+claim_flow = []
+quota_flow = "只做 chat 直通；远端的配额面本仓不转发（撞 quota_history.py 的「不做跨机合并」与 callers.py 的「不持有凭据」）"
+pitfalls = [
+  "远端连不上时**不许换号**：同一个地址拿 N 个号去问就是把 120 秒超时乘 N（卡 A375 判据 3b）",
+  "文案必须点名机器（urlsplit(url).netloc）：只说「上游连不上」等于没说哪台掉了",
+  "本仓是单向的：不开 LAN 监听口、没有 allow 名单、没有命名 key ⇒ 别人连不进来",
 ]

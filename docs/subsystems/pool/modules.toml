@@ -54,7 +54,7 @@ cli = "无"
 
 [[module]]
 name = "gateway.py"
-duty = "号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流；不知道额度的座由 `route.tier(None)=UNKNOWN_TIER` 排到最后（不是抛错退原序）；`/v1/models` 每条带 `disabled` 读数（与 `_model_block` 同一份 `model_registry.model_disabled`，三态 null / UNKNOWN / 原样 pattern）"
+duty = "号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流；不知道额度的座由 `route.tier(None)=UNKNOWN_TIER` 排到最后（不是抛错退原序）；`/v1/models` 每条带 `disabled` 读数（与 `_model_block` 同一份 `model_registry.model_disabled`，三态 null / UNKNOWN / 原样 pattern）远端平台（平台表里 `remote = true`）的连接层失败**不换号**（换号不会让它连上，只会把同一个超时乘 N），文案点名那台机器"
 cli = "`python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766] [--routing order]`（要 `TF_POOL_GATEWAY_TOKEN`；`TF_POOL_GATEWAY_BARE_IDS=1` 才在 `/v1/models` 的批准集行之后追加裸 id 行（**默认关**，只发布读数、不接请求）；`--routing` 是**唯一**选号入口：默认 `order`，空串 = `smart`（magpie 默认值），别名见 `pool.route.ROUTING_ALIASES`；名字认不出 ⇒ 退 2、一个端口都不绑）"
 
 [[module]]
@@ -264,7 +264,7 @@ cli = "无（被 `pool.model_registry` 读）"
 
 [[module]]
 name = "platforms.toml"
-duty = "平台能力表：九个平台的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`；`probe` 三个取值 http / manual / codearts-credits（后一个是签名读一次 statistics/plugin 的真读）"
+duty = "平台能力表：十个平台（含一个远端 magpie）的端点 / 凭据形态 / 结论码 / 出处；**零凭据**，未验证的标 `verified = false`；`probe` 三个取值 http / manual / codearts-credits（后一个是签名读一次 statistics/plugin 的真读）"
 cli = "无（被 `pool_accounts.py` 读）"
 
 [[module]]
