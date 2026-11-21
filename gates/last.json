@@ -1,13 +1,13 @@
 {
-  "rev": "37a09b98",
+  "rev": "f8ce9d25",
   "python": "3.14.6",
   "host": "DEV-HOST",
-  "tree": "1656172d6d009cf216e4af74d354ab7ee52c4508",
+  "tree": "d017a51313d7bdd54271f99df123e3345348dc6f",
   "tree_scope": "worktree-minus-gates",
-  "parent": "37a09b98",
-  "branch": "card/A384",
+  "parent": "f8ce9d25",
+  "branch": "card/E150",
   "dirty": true,
-  "at": "2026-11-21T10:08:47",
+  "at": "2026-11-21T11:07:55",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -17,98 +17,51 @@
   "co_tenants": {
     "collected": true,
     "like": 23,
-    "self_pid": 24144
+    "self_pid": 32884
   },
   "pytest_mode": "并行（pytest-xdist，-n 2）",
-  "slow_doors": [
-    {
-      "name": "pytest",
-      "seconds": 1020.63
-    }
-  ],
+  "slow_doors": [],
   "gates": [
-    {
-      "name": "pytest",
-      "exit_code": 0,
-      "seconds": 1020.63,
-      "summary": "5467 passed, 1 skipped, 1 xfailed, 1518 warnings in 1017.75s (0:16:57)",
-      "detail": ""
-    },
-    {
-      "name": "acceptance",
-      "exit_code": 0,
-      "seconds": 40.33,
-      "summary": "2 passed, 5491 deselected, 1 warning in 37.42s",
-      "detail": ""
-    },
-    {
-      "name": "pytest_chain",
-      "exit_code": 0,
-      "seconds": 396.94,
-      "summary": "22 passed, 5471 deselected, 1 warning in 393.48s (0:06:33)",
-      "detail": ""
-    },
-    {
-      "name": "ruff",
-      "exit_code": 0,
-      "seconds": 0.28,
-      "summary": "All checks passed!",
-      "detail": ""
-    },
-    {
-      "name": "mypy",
-      "exit_code": 0,
-      "seconds": 35.23,
-      "summary": "Success: no issues found in 58 source files",
-      "detail": ""
-    },
-    {
-      "name": "check_layers_selftest",
-      "exit_code": 0,
-      "seconds": 13.52,
-      "summary": "SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）",
-      "detail": ""
-    },
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 12.41,
+      "seconds": 5.4,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 0.45,
+      "seconds": 0.17,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.64,
+      "seconds": 0.24,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 8.36,
+      "seconds": 3.41,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 32.1,
+      "seconds": 15.46,
       "summary": "report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
     },
     {
       "name": "contract_doc_table",
       "exit_code": 0,
-      "seconds": 8.33,
-      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\A384\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+      "seconds": 0.13,
+      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E150\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
       "detail": ""
     }
   ],
@@ -116,46 +69,38 @@
   "excluded": {},
   "reused": {},
   "untracked": [],
-  "trailer": "【选测退回全量：闸二：没有夜间全量记录（gates/diag/nightly/nightly-*.json 一份都没有） ⇒ 全量】【必需 audit+lang；真跑全了 audit+lang】【只跑全了 audit+lang 档，未跑全量】pytest 5467 passed, 1 skipped, 1 xfailed, 1518 warnings in 1017.75s (0:16:57); acceptance 2 passed, 5491 deselected, 1 warning in 37.42s; pytest_chain 22 passed, 5471 deselected, 1 warning in 393.48s (0:06:33); ruff All checks passed!; mypy Success: no issues found in 58 source files; check_layers_selftest SELF-TEST PASS ✅ （9 条命名用例：2 正样例 + 5 负样例 + 1 豁免 + 1 中文断链可见性；负样例全部在临时合成小树上跑 `--root`，真实仓库一个字节都不写）; audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\A384\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+  "trailer": "【必需 audit；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E150\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
   "profiles_run": [
-    "audit",
-    "lang"
+    "audit"
   ],
   "required_profiles": [
-    "audit",
-    "lang"
+    "audit"
   ],
   "changed_paths": [
     "docs/INDEX.md",
-    "docs/changelog.d/T-AG672.md",
+    "docs/changelog.d/T-AG685.md",
     "docs/changelog.md",
-    "docs/subsystems/pool/模型与号池.md",
-    "docs/traceability.d/T-AG672.toml",
+    "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+    "docs/traceability.d/T-AG685.toml",
     "docs/traceability.toml",
-    "tests/test_pool_gateway.py",
     "复盘/交接-重构进度.md",
-    "复盘/交接.d/T-AG672.md",
-    "复盘/卡/卡A384-F10-previous_response_id不移植只钉原样透传.md"
+    "复盘/交接.d/T-AG685.md"
   ],
   "select": {
     "changed": [
       "docs/INDEX.md",
       "docs/changelog.md",
-      "docs/subsystems/pool/模型与号池.md",
+      "docs/subsystems/ci/GitHub-Actions-云门禁.md",
       "docs/traceability.toml",
-      "tests/test_pool_gateway.py",
       "复盘/交接-重构进度.md",
-      "复盘/卡/卡A384-F10-previous_response_id不移植只钉原样透传.md",
-      "docs/changelog.d/T-AG672.md",
-      "docs/traceability.d/T-AG672.toml",
-      "复盘/交接.d/T-AG672.md"
+      "docs/changelog.d/T-AG685.md",
+      "docs/traceability.d/T-AG685.toml",
+      "复盘/交接.d/T-AG685.md"
     ],
     "tests": [],
-    "fallback": true,
-    "reason": "闸二：没有夜间全量记录（gates/diag/nightly/nightly-*.json 一份都没有） ⇒ 全量",
-    "gates": [
-      "nightly"
-    ]
+    "fallback": false,
+    "reason": "只有记账/文档改动 ⇒ 没有代码用例要跑（全量仍在收口链 ④）",
+    "gates": []
   },
-  "sealed_at": "2026-11-21T10:08:51"
+  "sealed_at": "2026-11-21T11:07:58"
 }

@@ -12975,3 +12975,13 @@ evidence = [
   "test:test_pool_gateway.py::test_responses_protocol_has_no_endpoint_and_is_named",
 ]
 gaps = "1. 「不移植」只钉了**今天**的形状：chat body 里带 `previous_response_id` 原样到 forward、`/v1/responses` 是 404 —— 但上游到底认不认这个字段没有任何验证（chat_urls 全空，生产走不到真转发），所以「原样透传 = 上游能用」这半句仍是未验证。指针 tools/pool/gateway.py2. 闹钟 `test_alarm_responses_surface_stays_closed` 只钉源码里没有 Responses 语义（注释里提它不算）；哪天要真开这条面，正确做法是新开一条协议面，而这个决定写在文档 §8 里、没有机器判据。指针 docs/subsystems/pool/模型与号池.md3. §8 里引用的行号（`tools/pool/gateway.py:98`、`:99-104`、`:919`）是读数不是契约，网关任何一次改动都会让它们漂；本卡没给这些行号加「漂了就红」的钉子。指针 tools/pool/gateway.py"
+
+[entries."T-AG685"]
+id = "T-AG685"
+title = "GHA文档§6前移到骨架自己跑的那一趟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "- 同一段里并存两个时点的读数（最新那趟与前一趟），读者要自己判断哪条是「现在」—— 这是有意的分层（历史读数降级但不删），代价是 §6 变长，判据写在 复盘/卡/卡E150-GHA最近一趟换成骨架自己那一趟.md 判据 3。- 逐门 `seconds` 只保留最新一趟那一张表，旧趟只留 `pytest` 秒数与求和用于对照；代价是「某门在四趟里怎么摆动」这条信息不再能逐门读出来，只能靠 `pytest` 与求和两个量看量级（同上，见 复盘/卡/卡E150-GHA最近一趟换成骨架自己那一趟.md 判据 3）。- 「23 门全绿」的口径仍是「22 门 `exit_code=0` + `render` `EXCLUDED`」，`docs` 那门的 `summary` 原文是「没判完（有 skip）」，`exit_code=0` 只说明没超基线 —— 这条边界在 docs/subsystems/ci/GitHub-Actions-云门禁.md 的 §6 里以两行注意事项写死，但报告里说「全绿」时仍可能被读成「每门都判完了」。"

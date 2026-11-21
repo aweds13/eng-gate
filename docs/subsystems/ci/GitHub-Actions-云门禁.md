@@ -141,18 +141,19 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage al
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
 补丁打不上 / 树陈旧），这套是「造快照」的失败面。两张表各自钉在自己的测试里，别混着记。
 
-## 6. 真读数（最近一趟 2026-11-21：23 门全绿）
+## 6. 真读数（最近一趟 2026-11-21：23 门全绿，骨架自己跑的那一趟）
 
-镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136613578025`（run `44830398970`，head `190903a0`
-—— 这一趟的树是**仓里这份构建器**造的，即 `scripts/cloud/gha/build_snapshot.py --repo engineering --stage all`
-的产物）。读数：23 门、`not_run` 空、**红门 0 个**；`render` 是唯一 `EXCLUDED`（金样本采集自主机
-`DEV-HOST`，runner 上不跑，**不算红**）。
+镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136685943795`（run `44852205296`，head `97d009e5`）。
+这一趟就是**仓里这份 profile 骨架**自己跑出来的：`scripts/cloud/gha/build_snapshot.py` 带
+`--repo engineering --stage all` 从主树 `37a09b98` 造快照、提交成 `97d009e5`、推 `main`，再由镜像仓那个冻结的
+`Windows HKCU autostart E2E` 作业执行。读数：23 门、`not_run` 空、**红门 0 个**；`render` 是唯一 `EXCLUDED`
+（金样本采集自主机 `DEV-HOST`，runner 上不跑，**不算红**）。
 
-读数原文（源：job `136613578025` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
+读数原文（源：job `136685943795` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
 本机落盘在 gates/enggate-logs 下，不进仓）：
 
 ```
-ok=True  host=runnervmbpeip  rev=190903a0  branch=main  n_gates=23  not_run=[]  at=2026-11-20T22:57:07
+ok=True  host=runnervmbpeip  rev=97d009e5  branch=main  n_gates=23  not_run=[]  at=2026-11-21T02:04:05
 py=3.12.10  workers=4
 ```
 
@@ -160,31 +161,42 @@ py=3.12.10  workers=4
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
-| `pytest` | 1135.26 | `contrast` | 124.56 |
-| `pytest_chain` | 764.90 | `style` | 124.45 |
-| `ui_flow` | 731.07 | `check_layers_selftest` | 124.26 |
-| `web_live` | 138.63 | `skills_claims` | 124.24 |
-| `acceptance` | 136.58 | `contract_doc_table` | 51.96 |
-| `audit` | 136.37 | `mypy` | 51.15 |
-| `check_layers` | 130.01 | `docs` | 43.51 |
-| `lf1_live` | 125.46 | `audit_titles` | 7.82 |
-| `proxy` | 125.37 | `invariants` | 7.28 |
-| `ui_dom_probe` | 125.06 | `ruff` | 6.99 |
-| `commands` | 124.96 | `render` | 0（本机专用，`EXCLUDED`） |
-| `ui_text` | 124.70 | | |
+| `pytest` | 938.20 | `contrast` | 90.77 |
+| `pytest_chain` | 583.66 | `style` | 91.17 |
+| `ui_flow` | 636.37 | `check_layers_selftest` | 90.53 |
+| `web_live` | 104.73 | `skills_claims` | 95.41 |
+| `acceptance` | 105.15 | `contract_doc_table` | 37.88 |
+| `audit` | 106.18 | `mypy` | 37.65 |
+| `check_layers` | 105.02 | `docs` | 33.43 |
+| `lf1_live` | 92.93 | `audit_titles` | 7.11 |
+| `proxy` | 92.59 | `invariants` | 6.62 |
+| `ui_dom_probe` | 92.26 | `ruff` | 5.74 |
+| `commands` | 91.81 | `render` | 0（本机专用，`EXCLUDED`） |
+| `ui_text` | 91.49 | | |
 
-同源求和 **4464.59 s ≈ 74.4 min**；job 从起跑到结束 **1217 s ≈ 20.3 min**（源：GitHub Actions job 接口的
-`started_at 2026-11-20T22:36:55Z` / `completed_at 2026-11-20T22:57:12Z`）—— 逐门 `seconds` 是**墙钟相加**，
+同源求和 **3536.7 s ≈ 58.9 min**；job 从起跑到结束 **1015 s ≈ 16.9 min**（源：GitHub Actions job 接口的
+`started_at 2026-11-21T01:47:16Z` / `completed_at 2026-11-21T02:04:11Z`）—— 逐门 `seconds` 是**墙钟相加**，
 4 worker 并行下远大于总时长，别拿它当 SLA。
 
-前一晚（2026-11-19）真跑过两趟：job `135331686931`（run `44456198821`，head `cdb2c0fa`，886 s）与
+两处要看清楚，别把这张表读成「每门都判完了」：
+
+- `docs` 那门的 `summary` 原文是 `CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS`，`exit_code=0` 只说明
+  它没超基线；「判不出」的那批条目在 runner 上照样判不出。
+- `pytest` 那门的 `summary` 原文是 `5458 passed, 5 skipped, 1 xfailed`，与更早几趟的数字不同属正常
+  （树在变），能比的是「红门 0 个」这一条。
+
+前一趟（同一份构建器、profile 骨架落地后的第一趟）是 job `136613578025`（run `44830398970`，head
+`190903a0`）：同为 23 门全绿、`pytest` 1135.26 s、同源求和 4464.59 s、job 1217 s。两趟连着全绿，
+说明那一趟不是侥幸。
+
+再往前，2026-11-19 真跑过两趟：job `135331686931`（run `44456198821`，head `cdb2c0fa`，886 s）与
 job `135640738507`（run `44547171433`，head `14220c7c`，1343 s），同为 23 门全绿；那两趟的 `pytest` 分别
-821.79 s / 1256.27 s，同源求和 4603.51 s。三趟之间差这么多是 **runner 负载差**，不是判据变严 ——
+821.79 s / 1256.27 s，同源求和 4603.51 s。四趟之间差这么多是 **runner 负载差**，不是判据变严 ——
 同一套门、同一份 `run_gates.py`。
 
-再往前 head `1e815a96` 那趟（job `136403301980`）是 22 绿 1 红：唯一红门
+最早 head `1e815a96` 那趟（job `136403301980`）是 22 绿 1 红：唯一红门
 `tests/test_pool_limits_data.py::test_limits_path_is_the_one_we_document`（判据把「宿主机绝对路径」写死成
-本机那一条，runner 上必然不等），已由卡 E148（`T-AG681`）改成位址规则修掉 —— 上表这趟就是修完之后跑的。
+本机那一条，runner 上必然不等），已由卡 E148（`T-AG681`）改成位址规则修掉 —— 上面这几趟全绿都在它之后。
 
 ## 7. 已知边界 / 债
 
