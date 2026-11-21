@@ -17,7 +17,7 @@
 | **跑门禁 / 读懂门禁结果**（退出码、未跑、复用、假红） | `skills/pipe-gate/SKILL.md` + `skills/pipe-gate/references/repo-bindings.md`（锁在哪、超时多少、档位怎么选） |
 | **审计**（台账 / 证据 / 封存 / trailer） | 判据真源只有 `scripts/audit_progress.py` 一份；怎么用看 `skills/pipe-land/SKILL.md` 的收口段与 `skills/pipe-forensics/SKILL.md` |
 | **号池 POOL**（账号 → 模型 → 派活；MCP 只读面与写面） | `tools/pool_mcp.py` 的 docstring —— 工具名、只读/写面的**唯一真源**；模块地图看 `docs/subsystems/pool/README.md`；派活顺序看 `skills/pipe-card/SKILL.md` |
-| `pipe` 框架本身的门禁 / 派活 / 台账 | `skills/README.md`（分工判据，**顶部有四条 2026-10-24 新口径**）+ `复盘/新窗口交接卡.md`（本仓当前状态） |
+| `pipe` 框架本身的门禁 / 派活 / 台账 | `skills/README.md`（分工判据，**顶部有四条 2026-10-24 新口径**）+ 现状读 `python -X utf8 tools/wb_state.py` 与 `gates/last.json`；`复盘/新窗口交接卡.md` 只剩入口与防漂移清单（2026-11-21 降级，它自己的 CHECKPOINT 停在 2026-09，别当现状） |
 | **接手一个已存在的项目 / 新起一个项目** | `skills/pipe-takeover/`（接手）或 `skills/pipe-new/`（新起）：**第一步**先跑 `python -X utf8 tools/wb_takeover.py --root <目录> --strict`（判据不足会退 2 —— 不许猜类别） |
 | 接别的 harness | `skills/GLUE-harness.md` |
 | DSH 技能 / 插件的写法 | `DSH-技能与插件开发参考.md` |
