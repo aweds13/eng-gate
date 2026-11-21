@@ -1,0 +1,15 @@
+[entries."T-AG679"]
+id = "T-AG679"
+title = "F7请求体边界：入站Content-Encoding只判不认回415且零解压"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "test:test_pool_gateway.py::test_a391_non_identity_content_encoding_is_415",
+  "test:test_pool_gateway.py::test_a391_415_refuses_before_reading_the_body",
+  "test:test_pool_gateway.py::test_a391_no_compression_library_and_no_decompression",
+  "test:test_pool_gateway.py::test_a391_auth_is_decided_before_the_encoding",
+]
+gaps = "1. 415 是**护栏**不是线上修复：`tools/pool/platforms.toml` 九段 `chat_urls` 全空、网关今天也没有编排者 ⇒ 「压缩体真打进来」这条路生产上不存在，只有 stub 上游验过。指针 tools/pool/gateway.py2. 只拒**入站** `Content-Encoding`；上游若回了压缩体，网关照样原样转发（不解、不看）—— 那条路径本卡没裁决，也没钉子。指针 tools/pool/gateway.py3. 415 的 `kind` 落在 `api_error` 兜底（`_ERROR_KIND` 仍六键），客户端拿到的是「不是第七个错误类型」；将来若真要给 415 一个专属 kind，得连带改七值闭集那条既有限制。指针 tools/pool/gateway.py"
+

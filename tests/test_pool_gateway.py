@@ -2090,4 +2090,134 @@ def test_auth_refusal_drops_the_upstream_headers(env: Path) -> None:
     assert out2.status == 502, out2.status
     assert set(out2.headers) == {"Content-Type", "X-Pool-Tried"}, sorted(out2.headers)
     assert "www-authenticate" not in {name.lower() for name in out2.headers}
+# ============================ 卡 A391：入站 Content-Encoding 只判不认（415，零解压）
+
+A391_CHAT = "/v1/chat/completions"
+# 判据 1 的边界取值：大小写、首尾空白、逗号串联、以及今天没人用的几个名字。
+A391_REFUSED = ("gzip", "GZIP", " gzip ", "br", "deflate", "zstd", "identity, gzip")
+
+
+def _a391_coding(port: int, value: str) -> tuple[int, bytes]:
+    status, _, body = _request(port, "POST", A391_CHAT, body={"model": MODEL},
+                               headers={"Content-Encoding": value})
+    return status, body
+
+
+def test_a391_non_identity_content_encoding_is_415(start_server: Any) -> None:
+    """★ 判据 1 正面：非 identity 的编码一律 415，一个字节都不转发。
+
+    ★ 文案要把「不解压 / 请用 identity 重发」说清 —— 今天调用方拿到的是
+      「请求体不是 UTF-8 的 JSON 对象。」（误诊），这条钉的就是把那句话换准。
+    """
+    for coding in A391_REFUSED:
+        stub = _Stub(_ok())
+        port = start_server(stub)
+        status, body = _a391_coding(port, coding)
+        assert status == 415, (coding, status, body)
+        assert stub.calls == [], coding
+        text = body.decode("utf-8")
+        assert "Content-Encoding" in text, text
+        assert "identity" in text, text
+
+
+def test_a391_415_refuses_before_reading_the_body(start_server: Any) -> None:
+    """★ 判据 1 的读体面：415 只看头部 —— 声明 100000 字节却一个字节都不发，照样立刻 415。"""
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        conn.putrequest("POST", A391_CHAT)
+        conn.putheader("Authorization", f"Bearer {TOKEN}")
+        conn.putheader("Content-Type", "application/json")
+        conn.putheader("Content-Encoding", "gzip")
+        conn.putheader("Content-Length", "100000")
+        conn.endheaders()
+        response = conn.getresponse()
+        assert response.status == 415, response.status
+        response.read()
+    finally:
+        conn.close()
+    assert stub.calls == []
+
+
+def test_a391_identity_and_empty_content_encoding_are_unchanged(start_server: Any) -> None:
+    """★ 判据 1 反面 + 判据 5：identity / Identity / 空值 / 带空白的 identity 一律照旧转发。
+
+    ★ 这里断言的是**行为不变**（200 + 答复体 + 恰好一次转发），不是「不是 415」：
+      夹具的端点表是打桩的，走到后面会真的转发成功 —— 那才是「不变」的读数。
+      （卡规格草稿写的是 stub.calls == []，那是起草时端点表为空的 403 现象，与真夹具不符。）
+    """
+    for coding in ("", "identity", "Identity", " identity "):
+        stub = _Stub(_ok())
+        port = start_server(stub)
+        status, body = _a391_coding(port, coding)
+        assert status == 200, (coding, status, body)
+        assert body == b'{"ok":true}', (coding, body)
+        assert len(stub.calls) == 1, (coding, len(stub.calls))
+
+
+def test_a391_415_is_not_a_seventh_error_kind(start_server: Any) -> None:
+    """★ 判据 2：不扩 _ERROR_KIND —— 415 落到 api_error 兜底（回话形状不变）。
+
+    ★ 有意的取舍：那张表是**对外回话形状**、不是内部枚举；加第七个键等于顺手扩契约。
+    """
+    assert sorted(gateway._ERROR_KIND) == [400, 401, 403, 404, 413, 429]
+    assert 415 not in gateway._ERROR_KIND
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    status, body = _a391_coding(port, "gzip")
+    assert status == 415, status
+    assert json.loads(body)["error"]["type"] == "api_error", body
+    assert stub.calls == []
+
+
+def test_a391_no_compression_library_and_no_decompression() -> None:
+    """★ 判据 3：源码里既没有压缩库，也没有解压动作（**本卡零解压**）。"""
+    source, tree = _gateway_source()
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert imported.isdisjoint({"gzip", "zlib", "zstandard", "compression", "brotli"}), \
+        sorted(imported)
+    assert not [c for c in _string_constants(tree) if "decompress" in c.lower()]
+    assert not [line for line in source.splitlines()
+                if "gzip" in line or "zstd" in line or "brotli" in line]
+
+
+def test_a391_body_limit_and_413_are_untouched() -> None:
+    """★ 判据 4：上限仍是 32 MiB、源码里没有 512；既有 413 的文案也一个字不动。"""
+    source = _gateway_source()[0]
+    assert gateway.MAX_BODY_BYTES == 32 << 20
+    assert "512" not in source
+    assert "请求体太大：{exc.size} 字节 > 上限 {max_bytes} 字节" in source
+
+
+def test_a391_content_type_is_not_validated(start_server: Any) -> None:
+    """★ 判据 5：Content-Type: text/plain 照旧放行 —— 415 只由 Content-Encoding 触发。"""
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    status, _, body = _request(port, "POST", A391_CHAT, body={"model": MODEL},
+                               headers={"Content-Type": "text/plain"})
+    assert status == 200, (status, body)
+    assert len(stub.calls) == 1, len(stub.calls)
+
+
+def test_a391_auth_is_decided_before_the_encoding(start_server: Any) -> None:
+    """★ 判据 6：没有令牌 + gzip ⇒ 401（不是 415）—— 能力面不许白送给外部。"""
+    stub = _Stub(_ok())
+    port = start_server(stub)
+    status, _, _ = _request(port, "POST", A391_CHAT, body={"model": MODEL}, token=None,
+                            headers={"Content-Encoding": "gzip"})
+    assert status == 401, status
+    status, _, _ = _request(port, "POST", A391_CHAT, body={"model": MODEL}, token="wrong",
+                            headers={"Content-Encoding": "gzip"})
+    assert status == 401, status
+    status, _ = _a391_coding(port, "gzip")
+    assert status == 415, status
+    assert stub.calls == []
+
+
 

@@ -113,6 +113,11 @@
 - `tools/pool/gateway.py` 1364→1390 行：新增 `_auth_refused_note(attempts)`（只读 Attempt 的 seat/model/status，不碰 body/headers/正则），`_exhausted` 末尾加一支 `if {int(a.status) for a in attempts} <= {401, 403}` ⇒ 502 + 「全部候选的凭据都被 vendor 拒了（HTTP 401）：…」；其余全败仍是「全部候选都失败了」。
 - `tests/test_pool_gateway.py` 1387→1488 行、加 8 条钉子：上游 401 永不外泄、只有 `_gate` 出 401、归因不读 body、混败（401+500）不用归因、结构化 quota 仍压过 401、拒凭据时不带上游头、403 revoked 同档、七值闭集无第八值；既有 108 条一条未改。
 - 诚实边界：生产面走不到（chat_urls 全空、网关无编排者），这条报文属护栏与诊断准确度，不是线上修复。
+## 2026-11-20 T-AG679 F7 请求体边界：入站 Content-Encoding 只判不认（415），零解压
+- `tools/pool/gateway.py` 的 `_post` 开头加 415 分支：入站 `Content-Encoding` 非空且（strip + 大小写不敏感）不是 identity ⇒ 415，报文说清「本网关不解压，请用 identity 重发」；判定在读 `Content-Length` / `read_body` 之前，且仍在 `_gate` 之后（鉴权先行）。
+- **一行解压代码都没有**：不 import gzip / zlib / zstandard / compression / brotli；`MAX_BODY_BYTES`（32 MiB）、411 / 413 / 400 三条文案、Content-Type 校验一字不动。
+- `tests/test_pool_gateway.py` 1326→1456 行、加 8 条钉子：非 identity 七个取值一律 415、415 不读体（声明 100000 字节零发送）、identity/空值行为不变、415 不是第七个 kind、零压缩库零解压、上限与 413 不动、Content-Type 不校验、无令牌 + gzip ⇒ 401。
+- `docs/subsystems/pool/README.md` 表 B 加第 8 行「不做解压」；生成区由 `scripts/gen_pool_readme.py` 现算重写。
 ## 2026-11-19 T-AG649 提示条按点击时刻取历史：2.2 秒的寿命不再决定判据读到什么
 - 新增 `tools/tf_browser.mjs` 的 `TOAST_WATCH`（对外导出）：页面侧 `MutationObserver` 盯 `document.body`（`childList` / `subtree` / `characterData` / `attributes` + `attributeFilter:['class']`），把看到的提示条文本记进 `window.__tftoast`（`{at, text}`，上限 `KEEP = 200`），`window.__tftoastOpen` 防同一句每拍重记，装载幂等。
 - `tools/ui_flow_check.mjs`：`arm()` 装三个计数器（`MUTATION_WATCH` / `FETCH_WATCH` / `TOAST_WATCH`）；新增 `this.toastMark`，在 `press` / `drag` / `key` / `chord` **发事件之前**重置；新增 `toastSince(at)`（`Number(at || 0) - 50` 容差）；`waitToast` / `waitToastWhere` 进轮询 `while` 之前先 `toastSince(this.toastMark)`，命中即返回，`scaleMs(ms, waitScale())`、默认值 12000/12000/5000 与 `step` 150/120 一字未动。

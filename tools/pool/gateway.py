@@ -26,6 +26,10 @@ F86 ③ 不移植（卡 E143）：pool 的候选池是同一个模型的多个�
 安全口径整段照 tools/pool/mcp_http.py（只绑回环、必须 Bearer、Origin 白名单、请求体上限），
 但**换一套 token**：TF_POOL_GATEWAY_TOKEN 与 TF_MCP_HTTP_TOKEN 不共用 —— MCP 那个口子有写权限，
 这个口子代所有号发请求，权限不一样就不许借。
+
+★ 入站 Content-Encoding 只判不认（卡 A391）：非空且不是 identity 的一律 415，报文说清
+「本网关不解压，请用 identity 重发」。本文件**没有**解压行为，也不 import 任何压缩库 ——
+压缩体读进来只会被报成坏 JSON（误诊），所以宁可先明确拒绝。
 """
 
 from __future__ import annotations
@@ -1273,6 +1277,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._get(path)
 
     def _post(self, protocol: str) -> None:
+        # 入站编码只判不认（卡 A391）：本文件没有任何解压代码，压缩体读进来只会被
+        # 报成坏 JSON（误诊），所以凡声明了非 identity 的编码，一律在读体之前 415。
+        declared = ",".join(self.headers.get_all("Content-Encoding") or [])
+        codings = [c.strip().lower() for c in declared.split(",") if c.strip()]
+        if any(c != "identity" for c in codings):
+            self.close_connection = True
+            self._fail(415, "本网关不解压：Content-Encoding 只接受 identity，"
+                            f"收到 {declared.strip()}。请用 identity 重发。",
+                       kind="api_error", protocol=protocol)
+            return
         try:
             length = int(self.headers.get("Content-Length") or "")
         except ValueError:
