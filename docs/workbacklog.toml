@@ -7132,3 +7132,22 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E149"
+task = "T-AG682"
+title = "GHA门禁读数回写：23门全绿的现场与两份文档的旧口径"
+tree = ".wt/E149"
+spec = "复盘/卡/卡E149-GHA读数回写与两份文档的旧口径.md"
+files = [
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "复盘/交接.d/T-AG680.md",
+  "复盘/交接-重构进度.md",
+  "docs/changelog.d/T-AG682.md",
+  "docs/traceability.d/T-AG682.toml"
+]
+depends = [
+  "E148"
+]
+risk = "low"
+status = "pending"
