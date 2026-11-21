@@ -1040,6 +1040,49 @@ def test_the_audit_step_does_not_pass_check_false() -> None:
 #: 三条钉子各咬一处；`gates/diag/_rev_E98.py` 的四条变异逐条证明它们会红。
 
 
+# ============================================ 卡 E155（`AG690`）：重复开关
+def _parse_landing(argv: list[str]):
+    """拿**真件**的参数表解析（不跑落地链，只验 argparse 那一步）。"""
+    return _import_landing().build_parser().parse_args(argv)
+
+
+#: 三条「可以重复给」的开关都必须**累加**。判据是行为不是写法：
+#: 源码里写了 Baction="extend"B 不等于生效（BnargsB / BdefaultB 都能把它盖掉）。
+_REPEATABLE = (
+    ("--evidence", ["--evidence", "b", "c"], ["a", "b", "c"]),
+    ("--allow", ["--allow", "y", "z"], ["x", "y", "z"]),
+    ("--affected", ["--affected", "q"], ["p", "q"]),
+)
+
+
+@pytest.mark.parametrize(("flag", "extras", "want"), _REPEATABLE)
+def test_repeated_switches_accumulate(flag: str, extras: list[str], want: list[str]) -> None:
+    r"""卡 E155（`AG690`）：重复给同一个开关，**每一条都要留下**。
+
+    ★ 坏掉的写法（就是卡 E154 第一趟的现场）：argparse 的默认 action 下重复给同一个开关
+      **只有最后一条生效**，不报错、不警告 ⇒ 9 条 B--allowB 只活下来 1 条，提交
+      Bc05b9b51B 只含派生物，而门禁 / 审计 / 封存 / ⑧ 复核**每一道都说好**。
+      最后只在 rebase 报 Berror: cannot rebase: You have unstaged changes.B —— 指错方向。
+
+    ★ 为什么这条钉子看行为不看源码：Baction="extend"B 能被 Bdefault=NoneB 与 BnargsB
+      的组合悄悄抵消；只有真 Bparse_argsB 一遍才咬得住。
+    """
+    # ★ 每次都**先给一条**再重复给（E154 的现场就是「先给 9 条、后面又给 1 条」）：
+    #   只给重复的那一段，默认 action 与 extend 的行为一样，钉子就咬不住（实测变异不红）。
+    argv = ["--card", "E155", "--tree", ".", "--task", "T-AG690", "--title", "t",
+            "--evidence", "a", "--allow", "x", "--affected", "p"]
+    got = getattr(_parse_landing(argv + extras), flag.lstrip("-").replace("-", "_"))
+    assert got == want, f"{flag} 重复给被吞了：{got!r}（要 {want!r}）"
+
+
+def test_single_switch_multiple_values_still_works() -> None:
+    """老写法（一条开关 + 空格分隔多值）**一个字都不许变**：所有既有脚本都这么写。"""
+    a = _parse_landing(["--card", "E155", "--tree", ".", "--task", "T-AG690", "--title", "t",
+                        "--evidence", "a", "b", "--allow", "x", "y"])
+    assert a.evidence == ["a", "b"], a.evidence
+    assert a.allow == ["x", "y"], a.allow
+
+
 def _import_landing():
     """拿**真件** `tools/pool/landing.py`（磁盘上的当前代码，不是桩）。"""
     sys.path.insert(0, str(ROOT / "tools"))

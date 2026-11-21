@@ -523,6 +523,22 @@ def staged_and_extra(wt: pathlib.Path, allow: list[str]) -> tuple[list[str], lis
     return staged, extra
 
 
+def dead_allow(allow: list[str], staged: list[str]) -> list[str]:
+    r"""--allow 里**一条都没进暂存区**的那些（只用来点名，不改退出码）。
+
+    ★ 卡 E155（T-AG690）：这是「卡域整个没生效」的显式读数。以前它没有独立读数，
+      因为症状看着像成功：extra=[]（暂存全是派生物）+ staged 非空 ⇒
+      「计划外或空暂存区 ⇒ 停手」不触发。卡 E154 第一趟就这么提交出一笔**只有派生物**的
+      提交（c05b9b51），而门禁、审计、封存、⑧ 复核每一道都说好。
+
+    ★ 为什么只点名不改退出码：--allow 里带一个「这次没改、只是顺带声明」的文件是
+      **合法**用法（例如只改文档却声明同域的一个代码文件）；判死会把正常落地拦下来。
+      真正该拦的「计划外暂存」由 extra 管，本条只负责让这件事**留一行字**。
+    """
+    have = set(staged)
+    return [x for x in allow if x not in have]
+
+
 def _dirty_of(wt: pathlib.Path, rels: list[str]) -> list[str]:
     """这棵树里 `rels` 中**现在与 HEAD 不同**的那些（`git status --porcelain` 口径）。"""
     return [rel for rel in rels
@@ -2651,8 +2667,14 @@ def _prepare_next_member(entry: dict | None) -> None:
     print(f"  ✓ {task} 的卡树已 rebase 到 {new_head[:8]}（它的投机预检作废 ⇒ 变队首时重跑）")
 
 
-def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
+def build_parser() -> argparse.ArgumentParser:
+    r"""落地链的参数表（卡 E155 从 main() 里抽出来的，只为让「重复开关」可测）。
+
+    ★ 抽出来的理由不是整洁：argparse 默认 action 下**重复给同一个开关只有最后一条生效**，
+      而这个行为只有真拿 parser 去 parse_args 才咬得住（源码里写了 extend 不等于生效）。
+      本仓既有钉子全是「一条开关 + 空格分隔多值」的写法，所以这条静默行为一次都没被咬过
+      —— 卡 E154 那趟就这么丢掉 9 条 --allow 里的 8 条。
+    """
     ap = argparse.ArgumentParser()
     # ★ `--card` 与 `--batch` 二选一：前者是"一张卡一笔提交"，后者是**攒批通道**
     #   （同一个板块的若干小改攒成一批 ⇒ 一笔提交 / 一段文书 / 一趟门禁）。
@@ -2665,8 +2687,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--type", default="feat")
     ap.add_argument("--scope", default="tools")
     ap.add_argument("--group", default="ENGINEERING")
-    ap.add_argument("--evidence", nargs="+", required=True)
-    ap.add_argument("--allow", nargs="+", required=True)
+    # ★ 卡 E155（T-AG690）：这三条 action="extend" 是判据，不是风格。
+    #   argparse 默认 action 下**重复给同一个开关只有最后一条生效**，不报错、不警告 ——
+    #   卡 E154 第一趟就这么丢掉了 9 条 --allow 里的 8 条：提交 c05b9b51 只含派生物，
+    #   本卡唯一的内容改动没进去，而门禁/审计/封存/复核**每一道都说好**（因为丢的正是卡域，
+    #   extra 自然是空的）⇒ 最后只在 rebase 报 "cannot rebase: You have unstaged changes."。
+    #   改成 extend 之后 --allow a --allow b c ⇒ [a, b, c]；老的单条多值写法不变。
+    ap.add_argument("--evidence", nargs="+", action="extend", required=True)
+    ap.add_argument("--allow", nargs="+", action="extend", required=True)
     ap.add_argument("--port-base", type=int, default=9034)
     ap.add_argument("--refs", default="",
                     help="其它台账号（牵扯到的别的卡）；★ 不给时单卡笔默认写本笔台账号（卡 E38）")
@@ -2679,7 +2707,7 @@ def main(argv: list[str] | None = None) -> int:
     # ★ 卡 184（T-G284）：增量门禁开关 —— **默认关**（今天的行为一字不变）。
     #   只在显式给开关时才少跑几道门；判据方向 = 宁多勿漏
     #   （碰判据本体 / 空计划 / 今天没跑过全量 ⇒ 强制全量）。
-    ap.add_argument("--affected", nargs="+", metavar="路径",
+    ap.add_argument("--affected", nargs="+", action="extend", metavar="路径",
                     help="★ 卡 184：只跑「被这些路径影响」的门"
                          "（透传给 run_gates.py 的 --affected）。"
                          "判据方向 = 宁多勿漏：① 碰 scripts/**/tools/**/gates/** ⇒ 强制全量；"
@@ -2712,6 +2740,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="★ 卡 E42：门禁在哪跑 —— `cloud`（默认；云机门禁池）或 `local`"
                          "（今天的老行为：本机跑）。默认读 `TF_GATE_ON`，再默认 cloud。"
                          "★ 云机不可达 ⇒ 退 2 且**没有**继续落地（不回落本机）。")
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    ap = build_parser()
     a = ap.parse_args(argv)
     if a.no_preflight:
         print("  ★ `--no-preflight` 已改名 `--skip-preflight`（它跳过的是③″快门禁预检，"
@@ -3153,6 +3187,15 @@ def main(argv: list[str] | None = None) -> int:
     staged, extra = staged_and_extra(wt, allow)
     print("  staged =", staged)
     print("  extra  =", extra)
+    # ★ 卡 E155（T-AG690）：卡域**整个没生效**要留一行字。判据见 dead_allow()。
+    #   位置钉在「停手判据」**之前**：被停手拦下的那一趟更需要这行（E154 那趟就是
+    #   看着一切正常才走到 rebase 的）。
+    _dead = dead_allow(allow, staged)
+    if _dead:
+        print(f"  ★ 卡域里有 {len(_dead)} 条没进暂存区（没改动 / 不在树里）：{_dead}")
+        if len(_dead) == len(allow):
+            print("  ★★ 卡域**一条都没生效** —— 这一笔提交只含派生物；先确认"
+                  " --allow 是不是被重复给吞掉了（卡 E155），再决定要不要继续。")
     if extra or not staged:
         print("★ 计划外或空暂存区 ⇒ 停手")
         git("reset", cwd=wt, check=False)

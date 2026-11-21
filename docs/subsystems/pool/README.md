@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24540 行**（`wc -l tools/pool/*.py`，2026-11-22 现算）。
+`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24583 行**（`wc -l tools/pool/*.py`，2026-11-22 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -29,7 +29,7 @@
 | `holds.py` | 399 | 整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate` | 无 |
 | `holds_wiring.py` | 329 | 把判据层 holds（整窗下限 + 五因估算）接到生产读面：账本行 → holds.Window → holds.estimate()，零网络、零 sleep、不写盘、不写账本；没料时 why 原串 + why_text 人话（卡 A369） | 无 |
 | `jobs.py` | 581 | 作业日志状态分桶（在跑 / 已判决 / 断了 + 历史尝试 / 已被取代 / 台账已完结 / 非派活，卡 E116；台账读不到 ⇒ 判不了，卡 E132 —— 这一源不可判、不是结束） + 归属卡解析 `card_of_log` + 在飞三源 `in_flight` + 产物定位；只读、无副作用 | `wb_status.py`、`pool_mcp` 的 `job_list` / `job_status` |
-| `landing.py` | 3412 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里；封存（`scripts/run_gates.py` 的 `tree_without_gates`）用的临时索引**每次调用唯一**（`dsh_gates_index.<pid>.<seq>`，卡 E147），两个读者并发算同一棵树不再互相锁死 | `wb_land.py` |
+| `landing.py` | 3455 | 落地链八步（⓪ 回退 → ⑧ 复核落盘）：迁树 / 文书 / 门禁 / 封存 / 提交 / 合流，一笔提交的编排全在这里；封存（`scripts/run_gates.py` 的 `tree_without_gates`）用的临时索引**每次调用唯一**（`dsh_gates_index.<pid>.<seq>`，卡 E147），两个读者并发算同一棵树不再互相锁死 | `wb_land.py` |
 | `lanes.py` | 154 | 读 `lanes.toml`：一个号同时最多几张卡（数据面；判据在 `guards.lane_guard`） | 无（被 `pool.registry` 调） |
 | `lanes.toml` | 52 | 每账号并发闸的数据：稳定 id → 同时最多几张卡（随仓走、由人改，改完不用重启） | 无（被 `pool.lanes` 读） |
 | `lastgood.py` | 421 | 写盘纪律：原子替换 + `.bak` 落后一次 + fail-closed 读；`read_strict` 从不读 `.bak`（撤过的凭据不许复活） | 无（被 `pool.registry`、`pool.task`、`pool.queue`、`pool_accounts`、`gate_pool` 调） |
@@ -93,8 +93,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **24540 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 430 张（419 done / 11 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **24583 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 430 张（420 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 243 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |

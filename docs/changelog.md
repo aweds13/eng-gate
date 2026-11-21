@@ -11,6 +11,10 @@
 ## 2026-11-22 T-AG689 探针仓不能删但能归档：清单 G-1 从「四个都等你删」改成「已归档，只剩删」
 - `复盘/收口后待用户清单.md` 的 G-1 行重写：四个仓（`wf-scope-probe` / `fwprobe6` / `fwprobe5` / `python-`）2026-11-22 已逐个 `PATCH archived=true`（`gh api repos/aweds13/<仓>` 现读 `archived` 都是 `true`）⇒ 仓变只读、从活跃列表退出；「要你做什么」那列只剩「删」一个动作，403 原文（含 `gh auth refresh -h github.com -s delete_repo` 那一行）保留。
 - 同页「已经不需要你做的」那句从**三仓**改成**四仓**：`eng-gate` / `fw-gate` / `dsh-gate` / `ura-gate` 各 9 份噪声 workflow 已 `disabled_manually`、只剩 `CI` active（本轮现读 `gh api repos/aweds13/<仓>/actions/workflows`：四仓都是 total 10 / active 1 / disabled 9）。
+## 2026-11-22 T-AG690 重复给 `--allow` 不再被静默吞掉：三处 argparse 改 extend + 卡域没生效要留字
+- `tools/wb_land.py` 的 `--allow` 与 `tools/pool/landing.py` 的 `--allow` / `--evidence` / `--affected` 四处改成 `action="extend"`（`nargs` 原值不动）：`--allow a --allow b c` 现在收到 `['a','b','c']`，老的单条多值写法逐字不变。根因是 argparse 默认 action 下重复开关只有最后一条生效、不报错不警告 —— 卡 E154 第一趟就这么丢掉 9 条 `--allow` 里的 8 条，提交 `c05b9b51` 只含派生物。
+- `tools/pool/landing.py` 新增 `dead_allow()` 与一处在 `staged_and_extra()` 之后的点名：卡域里有几条没进暂存区会打印出来，**一条都没生效**时再打一行 ★★。只点名、不改退出码（顺带声明的文件是合法用法；真正该拦的「计划外暂存」仍归 `extra`）。
+- 钉子三层：`tests/test_wb_land.py` 的端到端（重复给三个 `--allow`，两个改动文件都必须进提交；反向改回默认 action 会红，且红的样子精确复现 E154 的 `cannot rebase: You have unstaged changes.`）、`tests/test_pool_landing.py` 的三条 parser 级参数化（`--evidence` / `--allow` / `--affected`，都必须「先给一条再重复给」才咬得住）、`dead_allow()` 的纯函数钉子。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

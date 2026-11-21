@@ -202,6 +202,7 @@ CHAIN_MANIFEST: tuple[str, ...] = (
     "tests/test_wb_land.py::test_gate_artifacts_present_or_changed_keep_review_green_e2e",
     "tests/test_wb_land.py::test_tamper_after_seal_review_red_e2e",
     "tests/test_wb_land.py::test_batch_landing_flips_member_status_e2e",
+    "tests/test_wb_land.py::test_repeated_allow_flags_all_take_effect",
     "tests/test_wb_plan.py::test_check_passes_when_no_landed_but_pending",
 )
 

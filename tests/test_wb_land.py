@@ -582,19 +582,29 @@ def _make_rerun_dirt(repo: Path) -> None:
 def _wand(
     repo: Path, *extra: str, allow: tuple[str, ...] = ("code",), tree: str = ".",
     card: str = "T-G999", task: str = "T-G999", batch: str | None = None,
-    env: dict[str, str] | None = None
+    env: dict[str, str] | None = None,
+    allow_flags: tuple[str, ...] | None = None,
 ) -> subprocess.CompletedProcess:
-    """跑一次 wb_land。★ 卡 228：`batch` 给了走 `--batch`（恰好给一个）；`env` 覆写
-    子进程环境（批 e2e 要传 `TF_BATCH_DIR` —— `_ENV` 是 import 时的快照，
-    monkeypatch.setenv 影响不到它）。"""
+    """跑一次 wb_land。★ 卡 228：batch 给了走 --batch（恰好给一个）；env 覆写
+    子进程环境（批 e2e 要传 TF_BATCH_DIR —— _ENV 是 import 时的快照，
+    monkeypatch.setenv 影响不到它）。
+
+    ★ 卡 E155（T-AG690）：allow_flags 用**重复开关**的写法给卡域
+      （--allow a --allow b），而不是默认的「一条开关带多值」。两种写法都必须全部生效 ——
+      默认 action 下前者只有最后一条活下来，而这条静默行为骗过了门禁、审计、封存、复核
+      （卡 E154 那趟的真实现场）⇒ 必须有一条钉子一直走这条路。
+    """
     cmd = [sys.executable, "-X", "utf8", str(repo / "tools" / "wb_land.py")]
     if batch is not None:
         cmd += ["--batch", batch]
     else:
         cmd += ["--card", card]
     cmd += ["--tree", tree, "--task", task, "--title", "钉子",
-            "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py",
-            "--allow", *allow, *extra]
+            "--type", "feat", "--group", "ENGINEERING", "--evidence", "code/a.py"]
+    if allow_flags is None:
+        cmd += ["--allow", *allow, *extra]
+    else:
+        cmd += [*allow_flags, *extra]
     return subprocess.run(cmd, cwd=str(repo), env=env or _ENV, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
 
@@ -726,6 +736,59 @@ def test_unexpected_staged_file_stops_and_resets(tmp_path: Path) -> None:
     assert "计划外" in _out(done), _out(done)
     staged = _git(repo, "diff", "--cached", "--name-only").stdout.strip()
     assert staged == "", f"停手之后不许留暂存：{staged!r}"
+
+
+# ======================================== ④″ 卡 E155：重复开关全部生效
+def test_repeated_allow_flags_all_take_effect(tmp_path: Path) -> None:
+    r"""卡 E155（T-AG690）：`--allow a --allow b c` 三条**都要生效**（端到端）。
+
+    ★ 为什么这条钉子必须存在：argparse 的默认 action 下**重复给同一个开关只有最后一条生效**，
+      不报错、不警告。卡 E154 第一趟（`gates/diag/land-E154.log`，2026-11-22 02:28）就这么
+      丢掉 9 条 `--allow` 里的 8 条 ⇒ 提交 `c05b9b51` 只含派生物，本卡唯一的内容改动
+      `复盘/收口后待用户清单.md` 一个字都没进。**每一道闸都说好**：`extra=[]`（暂存全是
+      allow 内的派生物）+ `staged` 非空 ⇒「计划外或空暂存区 ⇒ 停手」不触发；门禁全绿、
+      审计「926 条提交全部合格」、封存一致、⑧ 复核 problems=0，最后只在 rebase 报
+      `error: cannot rebase: You have unstaged changes.` 这种指错方向的话。
+
+    ★ 本仓既有钉子全是「一条开关 + 空格分隔多值」的写法（`_wand` 的默认路径），所以这条
+      静默行为一次都没被咬过 —— 本钉子走 `allow_flags` 那条路，把「重复给」钉死。
+
+    ★ 反向验证（必须做过的）：把 `tools/pool/landing.py` 的 `--allow` 改回默认 action，
+      这条钉子**必红** —— 现场是 `code/a.py` 留在工作区没进暂存，且输出里有
+      「卡域里有 N 条没进暂存区」那行。
+    """
+    repo = _mk_repo(tmp_path)
+    pen = _mk_pen(repo)
+    _write(pen, "code/a.py", "X = 2\n")
+    _write(pen, "code/b.py", "Y = 2\n")
+
+    done = _wand(repo, "--no-gate", tree=".pen",
+                 allow_flags=("--allow", "code/a.py", "--allow", "code/b.py",
+                              "--allow", "README.md"))
+
+    out = _out(done)
+    assert done.returncode == 0, out
+    # ★ 断言看**提交**而不是暂存区：落地链会当场 commit，暂存区那时已经空了 ——
+    #   断言暂存区等于什么都没测（第一版就这么写，恒为空）。
+    committed = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert "code/a.py" in committed, f"重复给的 --allow 被吞了（只留最后一条）：{committed!r}"
+    assert "code/b.py" in committed, f"重复给的 --allow 被吞了（只留最后一条）：{committed!r}"
+    assert "卡域**一条都没生效**" not in out, out
+
+
+def test_dead_allow_names_the_failure_without_changing_the_exit_code() -> None:
+    """卡 E155：卡域**整个没生效**要留一行字，但**不许**改退出码（判据 4 的两面）。
+
+    ★ 为什么只点名不改码：`--allow` 里带一个「这次没改、只是顺带声明」的文件是**合法**用法
+      （只改文档却声明同域的一个代码文件）；判死会把正常落地拦下来。真正该拦的「计划外暂存」
+      由 `extra` 管。
+    """
+    mod = _load_landing()
+    assert mod.dead_allow(["a.py", "b.py"], ["a.py", "docs/x.md"]) == ["b.py"]
+    assert mod.dead_allow(["a.py"], ["a.py"]) == []
+    # 空 allow ⇒ 空（不是「全都没生效」）
+    assert mod.dead_allow([], ["x"]) == []
+
 
 
 # ================================================================ ⑥ fail-fast

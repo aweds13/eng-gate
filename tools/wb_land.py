@@ -314,7 +314,11 @@ def preflight_main(argv: list[str]) -> int:
     ap.add_argument("--batch", help="批号（与 --card 二选一；体检口径同）")
     ap.add_argument("--tree", default=".", help="卡树（默认当前树）")
     ap.add_argument("--task", default="", help="台账号；不给就查队列里那张卡的 task")
-    ap.add_argument("--allow", nargs="*", default=None, help="卡域；不给就用队列 files")
+    # ★ 卡 E155（T-AG690）：`action="extend"` 不是风格选择。默认 action 下重复给同一个开关
+    #   只有**最后一条**生效、不报错（argparse 的既有行为）⇒ 体检拿到的卡域缺了大半，
+    #   而它看着像"通过"。落地踩过：`--allow a --allow b` ⇒ 只剩 `b`（卡 E154 那趟）。
+    ap.add_argument("--allow", nargs="*", action="extend", default=None,
+                    help="卡域；不给就用队列 files。★ 可以重复给，会累加")
     a, _rest = ap.parse_known_args(argv)
     return _landing.preflight(
         _landing.ROOT / a.tree, task=a.task, card=a.card, batch=a.batch, allow=a.allow,
