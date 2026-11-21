@@ -7309,3 +7309,30 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E156"
+task = "T-AG691"
+title = "三仓适配层收进仓"
+tree = ".wt/E156"
+spec = "复盘/卡/卡E156-三仓适配层收进仓.md"
+files = [
+  "scripts/cloud/gha/gate_profile.py",
+  "scripts/cloud/gha/build_snapshot.py",
+  "scripts/cloud/gha/adapters/framework.py",
+  "scripts/cloud/gha/adapters/dsh.py",
+  "scripts/cloud/gha/adapters/ultrarag.py",
+  "scripts/cloud/gha/conftest_reading.txt",
+  "scripts/cloud/gha/profiles/framework.toml",
+  "scripts/cloud/gha/profiles/dsh.toml",
+  "scripts/cloud/gha/profiles/ultrarag.toml",
+  "tests/test_gha_cloud_gate.py",
+  "docs/changelog.d/T-AG691.md",
+  "docs/traceability.d/T-AG691.toml"
+]
+depends = [
+  "E146",
+  "E151"
+]
+risk = "mid"
+status = "pending"
