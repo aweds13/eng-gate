@@ -814,6 +814,20 @@ def _served(base: Path, *, caller: str, model: str, attempts: list[Attempt], rep
                    chunks=reply.chunks, attempts=tuple(attempts), logged=logged)
 
 
+def _auth_refused_note(attempts: Sequence[Attempt]) -> str:
+    """全 auth 失败时的归因前缀（卡 A389 判据 3）：**只用结构化字段**拼，不读 body。
+
+    ★ 为什么带上状态码集合而不是写死 401：403（含 magpie 的 revoked 那一档）也是
+      vendor 拒凭据，报文说清是哪几个码，比笼统一句话好核对；单 401 时前缀逐字是
+      「全部候选的凭据都被 vendor 拒了（HTTP 401）」（判据 3(a) 钉这串）。
+    ★ 这里**不做判断**：叫不叫用本函数由 `_exhausted` 按 `classify()` 的 `KIND_AUTH`
+      决定 —— 归因不是新的分类器，换号 / 排序 / 状态码的语义一个字不动。
+    """
+    codes = sorted({int(a.status) for a in attempts})
+    shown = "/".join(str(c) for c in codes) if codes else "401"
+    return f"全部候选的凭据都被 vendor 拒了（HTTP {shown}）"
+
+
 def _exhausted(protocol: str, *, base: Path, caller: str, model: str, attempts: list[Attempt],
                replies: Sequence[Reply], skipped: list[str], endpoint_missing: list[str],
                earliest: dt.datetime | None, started_at: float,
@@ -854,6 +868,19 @@ def _exhausted(protocol: str, *, base: Path, caller: str, model: str, attempts: 
     detail = "；".join(a.label for a in attempts)
     logged = _log(base, caller=caller, model=model, attempts=attempts, served="",
                   status=pool_route_log.STATUS_ALL_FAILED, started_at=started_at, parts=parts)
+    if {int(a.status) for a in attempts} <= {401, 403}:
+        # 卡 A389（F90 窄口）：唯一的「归因」—— 全 auth 失败时用自己的话说清是**谁的
+        # 凭据被拒**，而不是与「上游全 500」「转发抛异常」共用「全部候选都失败了」
+        # （那句会被读成「调用方鉴权失败」或「网关坏了」）。
+        # ★ 只读 Attempt 的三个结构化字段（seat / model / status），不碰 body、不碰
+        #   headers、不做正则、不建关键词表 —— 归因不是第二个分类器：换号与出口状态码
+        #   仍全由 classify() 说了算（:755-757 的 continue 才是 401 不出网关的原因）。
+        #   这里是**可达才用**：401/403 被结构化 quota 信号改判成 quota 时走的是上面
+        #   那条 429，根本到不了这里（classify 的既有优先级，本卡不动）。
+        # ★ 状态码不动：401 / 403 进来仍出 502，本卡只改报文。
+        return _fail(protocol, 502, f"{_auth_refused_note(attempts)}：{detail}",
+                     attempts=attempts, logged=logged)
+
     return _fail(protocol, 502, f"全部候选都失败了：{detail}", attempts=attempts, logged=logged)
 
 

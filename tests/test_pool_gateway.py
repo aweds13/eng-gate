@@ -1990,3 +1990,104 @@ def test_alarm_responses_surface_stays_closed() -> None:
     assert "PROTOCOL_RESPONSES" not in dir(gateway)
     assert not [k for k in dir(gateway) if "RESPONSE" in k.upper() and k.startswith("PROTOCOL_")]
     assert gateway.endpoint_protocol("/v1/responses") == ""
+
+# ======================================== 卡 A389：F90 凭据被拒的 502 与归因（只钉既有行为）
+
+
+AUTH_REFUSED_401 = "全部候选的凭据都被 vendor 拒了（HTTP 401）"
+
+
+def _auth_reply(*, status: int = 401, body: bytes = b"{}",
+                headers: dict[str, str] | None = None) -> gateway.Reply:
+    return gateway.Reply(status=status, headers=headers or {}, body=body)
+
+
+def test_upstream_401_never_reaches_the_caller(env: Path) -> None:
+    """判据 1：上游 401 / 403 **永不出网关** —— 一律变 502；反向的 500 也仍是 502。"""
+    one = _Forward(_auth_reply())
+    out = _run(env, one)
+    assert out.status == 502, out.status
+    assert len(one.calls) == 1, one.calls
+
+    two = _Forward(_auth_reply())
+    out = _run(env, two, rows=(_row(SEAT_A), _row(SEAT_B)),
+               endpoints={"codearts": [CHAT_URL], "workbuddy": [CHAT_URL]})
+    assert out.status == 502, out.status
+    assert len(two.calls) == 2, two.calls
+
+    revoked = _auth_reply(status=403,
+                          body=b'{"error":{"message":"OAuth token has been revoked"}}')
+    assert _run(env, _Forward(revoked)).status == 502
+
+    boom = _auth_reply(status=500)
+    assert _run(env, _Forward(boom)).status == 502, "502 不是 auth 专用出口"
+
+
+def test_only_the_gate_answers_401() -> None:
+    """判据 2：401 **只许由 `_gate` 出** —— 全源只此一处 `_fail(401`，错误体走同一张映射表。"""
+    source, _tree = _gateway_source()
+    assert source.count("_fail(401") == 1, source.count("_fail(401")
+    assert "_ERROR_KIND" in source
+
+
+def test_auth_attribution_reads_no_body(env: Path) -> None:
+    """判据 3：归因前缀只由结构化字段拼 —— body 换自由文案 / 换 code，前缀一字不动。"""
+    plain = _run(env, _Forward(_auth_reply()))
+    assert plain.status == 502, plain.status
+    message = json.loads(plain.body)["error"]["message"]
+    assert message.startswith(AUTH_REFUSED_401), message
+
+    free_text = '{"error": {"message": "额度用完了，余额不足"}}'.encode()
+    chatty = _run(env, _Forward(_auth_reply(body=free_text)))
+    assert json.loads(chatty.body)["error"]["message"].startswith(AUTH_REFUSED_401), chatty.body
+
+    other_code = b'{"error": {"code": "invalid_api_key"}}'
+    coded = _run(env, _Forward(_auth_reply(body=other_code)))
+    assert json.loads(coded.body)["error"]["message"].startswith(AUTH_REFUSED_401), coded.body
+
+
+def test_auth_attribution_is_not_used_when_a_seat_was_not_refused(env: Path) -> None:
+    """判据 3(d)：一个 401 + 一个 500 ⇒ 不许说「凭据被拒」，仍是「全部候选都失败了」。"""
+    forward = _Forward(_auth_reply(), _auth_reply(status=500))
+    out = _run(env, forward, rows=(_row(SEAT_A), _row(SEAT_B)),
+               endpoints={"codearts": [CHAT_URL], "workbuddy": [CHAT_URL]})
+    assert out.status == 502, out.status
+    assert len(forward.calls) == 2, forward.calls
+    message = json.loads(out.body)["error"]["message"]
+    assert message.startswith("全部候选都失败了"), message
+    assert "凭据被拒" not in message, message
+
+
+def test_structured_quota_still_wins_over_the_401(env: Path) -> None:
+    """判据 3(c) 的实况：401 + 结构化 insufficient_quota **仍走 429**（`classify` 的既有优先级）。
+
+    ★ 卡 A389 规格写「401/403 就是 auth，与 code 无关」；实读 `classify()`（其 docstring
+      文档化的顺序：结构化 quota 比状态码更具体）**这一档到不了归因分支**。这条钉今天
+      真跑得出来的那一面：429 + 额度类报文，且绝不出现本卡新增的「凭据被拒」前缀。
+    """
+    quota = b'{"error": {"code": "insufficient_quota"}}'
+    out = _run(env, _Forward(_auth_reply(body=quota)))
+    assert out.status == 429, out.status
+    message = json.loads(out.body)["error"]["message"]
+    assert message.startswith("全部候选都是额度/限流类失败"), message
+    assert "凭据被拒" not in message, message
+
+
+def test_auth_refusal_drops_the_upstream_headers(env: Path) -> None:
+    """判据 4：上游 `WWW-Authenticate` / 自定义头**不进回话**。
+
+    回话头只剩 Content-Type 与 X-Pool-Tried（`_fail` 只带自己的头，不透传 reply.headers）。
+    """
+    upstream = {"WWW-Authenticate": "Bearer", "X-Upstream": "1"}
+    out = _run(env, _Forward(_auth_reply(headers=upstream)))
+    assert out.status == 502, out.status
+    assert set(out.headers) == {"Content-Type", "X-Pool-Tried"}, sorted(out.headers)
+    assert "www-authenticate" not in {name.lower() for name in out.headers}
+
+    two = _Forward(_auth_reply(headers=upstream), _auth_reply(headers=upstream))
+    out2 = _run(env, two, rows=(_row(SEAT_A), _row(SEAT_B)),
+                endpoints={"codearts": [CHAT_URL], "workbuddy": [CHAT_URL]})
+    assert out2.status == 502, out2.status
+    assert set(out2.headers) == {"Content-Type", "X-Pool-Tried"}, sorted(out2.headers)
+    assert "www-authenticate" not in {name.lower() for name in out2.headers}
+

@@ -12985,3 +12985,18 @@ evidence = [
   "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
 ]
 gaps = "- 同一段里并存两个时点的读数（最新那趟与前一趟），读者要自己判断哪条是「现在」—— 这是有意的分层（历史读数降级但不删），代价是 §6 变长，判据写在 复盘/卡/卡E150-GHA最近一趟换成骨架自己那一趟.md 判据 3。- 逐门 `seconds` 只保留最新一趟那一张表，旧趟只留 `pytest` 秒数与求和用于对照；代价是「某门在四趟里怎么摆动」这条信息不再能逐门读出来，只能靠 `pytest` 与求和两个量看量级（同上，见 复盘/卡/卡E150-GHA最近一趟换成骨架自己那一趟.md 判据 3）。- 「23 门全绿」的口径仍是「22 门 `exit_code=0` + `render` `EXCLUDED`」，`docs` 那门的 `summary` 原文是「没判完（有 skip）」，`exit_code=0` 只说明没超基线 —— 这条边界在 docs/subsystems/ci/GitHub-Actions-云门禁.md 的 §6 里以两行注意事项写死，但报告里说「全绿」时仍可能被读成「每门都判完了」。"
+
+[entries."T-AG677"]
+id = "T-AG677"
+title = "F90凭据被vendor拒仍出502并加结构化归因：只读状态码不碰body"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/pool/gateway.py",
+  "file:tests/test_pool_gateway.py",
+  "test:test_pool_gateway.py::test_upstream_401_never_reaches_the_caller",
+  "test:test_pool_gateway.py::test_auth_attribution_reads_no_body",
+  "test:test_pool_gateway.py::test_auth_attribution_is_not_used_when_a_seat_was_not_refused",
+  "test:test_pool_gateway.py::test_auth_refusal_drops_the_upstream_headers",
+]
+gaps = "1. 网关今天**没有编排者**，`tools/pool/platforms.toml` 九段 `chat_urls` 全空 ⇒ forward_http 生产上走不到：这条「凭据被拒」的报文只在 stub 上游上验过，没有一次真机 401。指针 tools/pool/gateway.py2. 归因前缀里的状态码集合是「所有尝试的 status 去重排序」，同一个座被重试两次仍只算一次尝试 ⇒ 报文里没有座位级计数，读不出「哪几个座被拒」。指针 tools/pool/gateway.py3. `_why`（:758-766）今天已经把上游 body 前 200 字拼进 `detail`，本卡只钉住「**归因前缀**不读 body」；detail 里 vendor 的自由文案尚未裁决（既有行为，未改）。指针 tools/pool/gateway.py"

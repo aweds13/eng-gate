@@ -9,7 +9,7 @@
 ## 1. 它现在是什么（代码边际）
 
 <!-- pool-margin:begin -->
-`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24293 行**（`wc -l tools/pool/*.py`，2026-11-21 现算）。
+`tools/pool/` = 54 个 py（53 个模块 + `__init__.py`）、**24320 行**（`wc -l tools/pool/*.py`，2026-11-21 现算）。
 
 每个模块都可 import（判据在库里），每个 CLI 都是**薄壳**（只解析参数 + 打印）。
 
@@ -24,7 +24,7 @@
 | `cleared.py` | 286 | 清空用量的标记（`gates/diag/usage-cleared.json`）：清空**永不写进账**，只换读法；判不出就显出全部 | `pool.cleared main`（子命令 list / add） |
 | `dispatch_shim.py` | 141 | 面板点「派活」的那一层中间壳：按卡号查规格（绝不让客户端传路径）、写死 argv 真跑一次派活器、往 `gates/diag/pool-actions.log` 追加一行痕；本壳不复制任何判据（卡号 / 域 / 树 / 干跑全在真派活器那边） | `python -X utf8 tools/pool/dispatch_shim.py --card <卡号> [--tree .wt/<卡>] [--dry-run]` |
 | `failclosed.py` | 66 | 判不出来时拒还是放：`NotServing`（遮蔽器不在就不发）与 `NotLimited`（限额拿不到就不发）两条语义 | 无 |
-| `gateway.py` | 1458 | 号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流；不知道额度的座由 `route.tier(None)=UNKNOWN_TIER` 排到最后（不是抛错退原序）；`/v1/models` 每条带 `disabled` 读数（与 `_model_block` 同一份 `model_registry.model_disabled`，三态 null / UNKNOWN / 原样 pattern） | `python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766] [--routing order]`（要 `TF_POOL_GATEWAY_TOKEN`；`TF_POOL_GATEWAY_BARE_IDS=1` 才在 `/v1/models` 的批准集行之后追加裸 id 行（**默认关**，只发布读数、不接请求）；`--routing` 是**唯一**选号入口：默认 `order`，空串 = `smart`（magpie 默认值），别名见 `pool.route.ROUTING_ALIASES`；名字认不出 ⇒ 退 2、一个端口都不绑） |
+| `gateway.py` | 1485 | 号池网关（同协议直通）：`classify` 七值失败分类（只看状态码与结构化字段，不解析文案）、`route_once` 干跑式选号/沉底/RPM/收窄/换号与 `wb-route.jsonl` 留痕、四条回环 HTTP 面（Bearer + Origin 白名单 + 32 MiB 上限）——不翻译协议、不攒流；不知道额度的座由 `route.tier(None)=UNKNOWN_TIER` 排到最后（不是抛错退原序）；`/v1/models` 每条带 `disabled` 读数（与 `_model_block` 同一份 `model_registry.model_disabled`，三态 null / UNKNOWN / 原样 pattern） | `python -X utf8 tools/pool/gateway.py [--host 127.0.0.1] [--port 8766] [--routing order]`（要 `TF_POOL_GATEWAY_TOKEN`；`TF_POOL_GATEWAY_BARE_IDS=1` 才在 `/v1/models` 的批准集行之后追加裸 id 行（**默认关**，只发布读数、不接请求）；`--routing` 是**唯一**选号入口：默认 `order`，空串 = `smart`（magpie 默认值），别名见 `pool.route.ROUTING_ALIASES`；名字认不出 ⇒ 退 2、一个端口都不绑） |
 | `guards.py` | 487 | 树 / 冲突域 / 门禁锁 / 日志 / 项目五条守卫，**纯函数**（吃已读好的数据回 `list[str]`，不写文件不 print） | 无（被 `wb_dispatch`、`wb_registry` 调） |
 | `holds.py` | 399 | 整窗用量的下限 + 五因估算（magpie `window_holds` 移植）：`bounds` / `holds_bounds` / `estimate` | 无 |
 | `holds_wiring.py` | 329 | 把判据层 holds（整窗下限 + 五因估算）接到生产读面：账本行 → holds.Window → holds.estimate()，零网络、零 sleep、不写盘、不写账本；没料时 why 原串 + why_text 人话（卡 A369） | 无 |
@@ -93,8 +93,8 @@
 
 | 指标 | 读数 | 怎么取 |
 |---|---|---|
-| 实现体量 | **24293 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
-| 队列卡数 | 425 张（410 done / 15 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
+| 实现体量 | **24320 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
+| 队列卡数 | 425 张（411 done / 14 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
 | 派活日志 | 242 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
