@@ -7254,3 +7254,21 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E153"
+task = "T-AG688"
+title = "收口：待用户清单增GitHub权限层 + GHA文档跟到最新那趟"
+tree = ".wt/E153"
+spec = "复盘/卡/卡E153-收口清单与GHA文档跟到最新那趟.md"
+files = [
+  "复盘/收口后待用户清单.md",
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/changelog.d/T-AG688.md",
+  "docs/traceability.d/T-AG688.toml"
+]
+depends = [
+  "E152"
+]
+risk = "low"
+status = "pending"
