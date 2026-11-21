@@ -7272,3 +7272,20 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E154"
+task = "T-AG689"
+title = "探针仓已归档、噪声workflow四仓口径回写"
+tree = ".wt/E154"
+spec = "复盘/卡/卡E154-探针仓已归档与噪声workflow四仓口径.md"
+files = [
+  "复盘/收口后待用户清单.md",
+  "docs/changelog.d/T-AG689.md",
+  "docs/traceability.d/T-AG689.toml"
+]
+depends = [
+  "E153"
+]
+risk = "low"
+status = "pending"
