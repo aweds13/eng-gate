@@ -7353,3 +7353,21 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E158"
+task = "T-AG693"
+title = "GHA文档第6节换成骨架改完那一趟"
+tree = ".wt/E158"
+spec = "复盘/卡/卡E158-GHA文档第6节换成骨架改完那一趟.md"
+files = [
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/changelog.d/T-AG693.md",
+  "docs/traceability.d/T-AG693.toml"
+]
+depends = [
+  "E156",
+  "E157"
+]
+risk = "low"
+status = "pending"
