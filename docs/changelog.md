@@ -27,6 +27,11 @@
 - 删掉末段那句已被推翻的「dsh 的 passed / failed 都是 0」，换成计数怎么来的（vitest 的 JSON reporter 写报告，适配器读它）与 1158 / 39 / 1197 三个真数。
 - 第 8.4 节第 3 条从「形状不统一、那是另一张卡的活」改写成本轮事实：engineering 与三仓都是 BEGIN/END JSON，只剩 om-gate 没有适配器还是四段汇总行；第 2 条补上理由（五仓都走 from_remote_workflows，所以 workflow.install 仍无消费者）。
 - 第 8.1 节抬头加一句「目录里现在有五份」，说明另外三份的差别集中在 conftest_path / extra_files / 冒烟形态。
+## 2026-11-22 T-AG693 GHA 文档 §6 换成骨架改完那一趟：23 门全绿的读数与它证明的边界
+- docs/subsystems/ci/GitHub-Actions-云门禁.md 第 6 节整段换成 job 137046148410（run 44969569738，head a4b485e5）：读数 ok=True / n_gates=23 / not_run=[] / 红门 0 个，23 门逐门秒表，同源求和 2743.2 s，job 墙钟 789 s（started 2026-11-22T01:02:56Z → completed 01:16:05Z）。
+- 上一趟 7ec400f0（4893.61 s / 1377 s）降级进 6.1 做对照，一条不删；3a5bc8cc 三连、ce93720e、97d009e5、190903a0、2026-11-19 两趟、1e815a96 全部保留。
+- 8.2 补 runner 侧对照：骨架改动前后两趟（7ec400f0 / a4b485e5）都是 23 门全绿，逐门秒求和的差是 runner 负载，不是判据变松 —— 门表与 scripts/run_gates.py 一条没动。
+- 第 9 节 eng-gate 行跟着换成 a4b485e5 / run 44969569738 / job 137046148410，另外四行不动（本轮没有新读数）。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

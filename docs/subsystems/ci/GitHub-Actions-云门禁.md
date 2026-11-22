@@ -141,29 +141,25 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo engineering --stage al
 ★ 与 `scripts/cloud/run_gate.sh` 的 2/9/4/5/7 **不通用**：那套是「租 ECS」的失败面（缺仓外配置 / 缺云机 / 播种对齐 /
 补丁打不上 / 树陈旧），这套是「造快照」的失败面。两张表各自钉在自己的测试里，别混着记。
 
-## 6. 真读数（最近一趟 2026-11-21：23 门全绿；这是 E152 的症状兜底上线后第一趟）
+## 6. 真读数（最近一趟 2026-11-22：23 门全绿；这是骨架改成 profile 驱动之后的第一趟）
 
-镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `136924983162`（run `44930214907`，head `7ec400f0`，
-`run_attempt=1`）。这一趟是**仓里这份 profile 骨架**自己跑出来的：`scripts/cloud/gha/build_snapshot.py`
-带 `--repo engineering --stage all` 从源树（主树 `d45578d8`，即卡 E152 落地后那一笔）造快照、提交成
-`7ec400f0`、推 `main`，再由镜像仓那个冻结的 `Windows HKCU autostart E2E` 作业执行。读数：23 门、
+镜像仓 `aweds13/eng-gate` 上**最近一趟**是 job `137046148410`（run `44969569738`，head `a4b485e5`，
+`run_attempt=1`）。这一趟是仓里这份 profile 骨架自己跑出来的：`scripts/cloud/gha/build_snapshot.py`
+带 `--repo engineering --stage all` 从源树（主树 `195cc107`，即卡 E157 落地后那一笔）造快照、提交成
+`a4b485e5`、推 `main`，再由镜像仓那个冻结的 `Windows HKCU autostart E2E` 作业执行。读数：23 门、
 `not_run` 空、**红门 0 个**；`render` 是唯一 `EXCLUDED`（金样本采集自主机 `DEV-HOST`，
 runner 上不跑，**不算红**）。
 
-★ **这一趟要验的是「症状兜底」，不是「门禁全绿」**：卡 E152（`T-AG687`）修的是「`web_live` 红的时候
-症状行被后面 61 条 `[OK ]` 挤出 `detail` 的尾部 20 行窗口，`mark_suspect_rows()` 因此标不上 `SUSPECT`」。
-这一趟 `web_live` **是绿的**（148.22 s，`summary` 原文 `[OK ] 手机直传：认得出来源设备（ph-）`）
-⇒ 兜底在真 runner 上**一次都没被触发**，所以这趟读数**不能**当作「兜底已在 runner 上验证过」。
-它的证据在仓内：`tests/test_gate_summary_truthful.py::test_detail_keeps_the_symptom_outside_the_tail_window`
-与 `tests/test_web_live_timeout.py::test_star_symptom_survives_the_final_rerun` 两条钉子，
-外加一次反向实验（回旧版代码 ⇒ 两条都红；换回新版 ⇒ 全绿）。下一趟 `web_live` 真红的时候，
-第一次能看到 `status=SUSPECT` 或 `detail` 首行带 `★` 的现场。
+★ **这一趟要验的是「骨架改动后 engineering 还是逐字不变」**：卡 E156（`T-AG691`）把两段写死的逻辑抽成
+helper，并把写死的 `tests/conftest.py` / `pytest_addoption` 换成 profile 的 `adapter.conftest_path` /
+`adapter.conftest_marker` —— 这两处 **engineering 也走**。§8.2 那条 `git ls-tree -r` 逐行比证明的是
+**快照内容**没变；runner 上 23 门还全绿，是本卡这一趟才答的。
 
-读数原文（源：job `136924983162` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
+读数原文（源：job `137046148410` 日志里 `=== GHA-GATE-READING-BEGIN/END ===` 之间那段 JSON；
 本机落盘在 gates/enggate-logs 下，不进仓）：
 
 ```
-ok=True  host=runnervmbpeip  rev=7ec400f0  branch=main  n_gates=23  not_run=[]  at=2026-11-21T17:51:11
+ok=True  host=runnervmbpeip  rev=a4b485e5  branch=main  n_gates=23  not_run=[]  at=2026-11-22T01:16:00
 py=3.12.10  workers=4
 ```
 
@@ -171,33 +167,39 @@ py=3.12.10  workers=4
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
-| `pytest` | 1290.10 | `check_layers` | 132.82 |
-| `pytest_chain` | 865.83 | `lf1_live` | 130.04 |
-| `ui_flow` | 797.35 | `proxy` | 129.63 |
-| `acceptance` | 149.96 | `ui_dom_probe` | 129.09 |
-| `web_live` | 148.22 | `commands` | 128.81 |
-| `audit` | 144.15 | `ui_text` | 128.38 |
-| `skills_claims` | 141.21 | `style` | 128.03 |
-| `contrast` | 127.73 | `check_layers_selftest` | 127.39 |
-| `contract_doc_table` | 58.38 | `mypy` | 57.98 |
-| `docs` | 54.59 | `audit_titles` | 8.35 |
-| `invariants` | 8.03 | `ruff` | 7.54 |
+| `pytest` | 730.66 | `check_layers_selftest` | 83.15 |
+| `ui_flow` | 552.31 | `audit` | 82.26 |
+| `pytest_chain` | 442.28 | `acceptance` | 80.89 |
+| `check_layers` | 78.79 | `web_live` | 77.57 |
+| `lf1_live` | 66.22 | `proxy` | 65.70 |
+| `ui_dom_probe` | 65.63 | `commands` | 65.28 |
+| `ui_text` | 65.06 | `style` | 64.61 |
+| `contrast` | 64.36 | `skills_claims` | 64.09 |
+| `contract_doc_table` | 27.41 | `mypy` | 26.80 |
+| `docs` | 25.46 | `audit_titles` | 5.35 |
+| `invariants` | 5.04 | `ruff` | 4.28 |
 | `render` | 0（本机专用，`EXCLUDED`） | | |
 
-同源求和 **4893.61 s ≈ 81.6 min**；job 从起跑到结束 **1377 s ≈ 23.0 min**（源：GitHub Actions job 接口的
-`started_at 2026-11-21T17:28:20Z` / `completed_at 2026-11-21T17:51:17Z`）—— 逐门 `seconds` 是**墙钟相加**，
+同源求和 **2743.2 s ≈ 45.7 min**；job 从起跑到结束 **789 s ≈ 13.2 min**（源：GitHub Actions job 接口的
+`started_at 2026-11-22T01:02:56Z` / `completed_at 2026-11-22T01:16:05Z`）—— 逐门 `seconds` 是**墙钟相加**，
 4 worker 并行下远大于总时长，别拿它当 SLA。
 
 两处要看清楚，别把这张表读成「每门都判完了」：
 
 - `docs` 那门的 `summary` 原文是 `CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS`，`exit_code=0` 只说明
   它没超基线；「判不出」的那批条目在 runner 上照样判不出。
-- `pytest` 那门的 `summary` 原文是 `5510 passed, 5 skipped, 2 xfailed, 4 warnings in 1281.85s (0:21:21)`，
-  与更早几趟的数字不同属正常（树在变），能比的是「红门 0 个」这一条。
-
+- `pytest` 的 `summary` 原文是 `5523 passed, 5 skipped, 2 xfailed, 4 warnings in 726.47s`，
+  `pytest_chain` 是 `23 passed, 5532 deselected` —— 比上一趟（`5510 passed` / `22 passed`）各多几条，
+  是树上新落的卡带的，不是判据变了。能比的是「红门 0 个」这一条。
 ### 6.1 往前数（降级成对照，全部保留）
 
-上一趟是 head `3a5bc8cc`（run `44908327988`）的**三连** —— 同一个 head、同一个 runner、同一个 python，
+上一趟是 head `7ec400f0`（run `44930214907`，job `136924983162`，`run_attempt=1`）：同样 23 门全绿、
+红门 0 个，逐门秒求和 **4893.61 s ≈ 81.6 min**、job 墙钟 **1377 s ≈ 23.0 min**
+（`started_at 2026-11-21T17:28:20Z` / `completed_at 2026-11-21T17:51:17Z`），`pytest` 1290.10 s /
+`pytest_chain` 865.83 s / `ui_flow` 797.35 s。那一趟是**骨架改动前**推的（E156 之前的文档里它就是 §6 的主角），
+现在降级到这里做对照 —— 改动前后两趟都是 23 门全绿，判据集合没动。
+
+再往前是 head `3a5bc8cc`（run `44908327988`）的**三连** —— 同一个 head、同一个 runner、同一个 python，
 前两趟各红 1 门、第三趟才绿：
 
 | attempt | job | 结论 | 红门原文 | 逐门秒求和 |
@@ -338,7 +340,7 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
 
 | 镜像仓 | 可见性 | 源仓 | 跑什么 | 最近那趟（head / run / 作业） | 读数 |
 |---|---|---|---|---|---|
-| `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `7ec400f0` / run `44930214907` / `Windows HKCU autostart E2E` `136924983162` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 4893.61 s（§6） |
+| `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `a4b485e5` / run `44969569738` / `Windows HKCU autostart E2E` `137046148410` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 2743.2 s（§6） |
 | `aweds13/om-gate` | **public** | `OpenMAIC` | 它自己 `ci.yml` 的 `unit` 四片 `vitest run --shard=N/4` | `92f3c6fe` / run `44753382083` / `Unit Tests (N/4)` × 4 | 用例 64 failed / 14727 passed / 448 skipped，四片相加 ≈ 717.7 s（§8.3） |
 | `aweds13/fw-gate` | private | `framework` | 那棵树自己的 `pytest`（适配器打 JSON） | `951faea6` / run `44959470353` / `137014874255` | `{"ok": true, "returncode": 0, "suite": "tests", "passed": 55, "failed": 0, "errors": 0, "skipped": 0, "red": []}`，作业 41 s |
 | `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run --reporter=json`（不分片） | `1f9fde2c` / run `44959511018` / `137015005171` | `{"ok": false, "suite": "vitest", "passed": 1158, "failed": 39, "skipped": 0, "files_failed": 16, "files_passed": 115}`（`numTotalTests 1197` / `numTotalTestSuites 131`），作业 279 s |

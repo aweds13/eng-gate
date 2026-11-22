@@ -13158,3 +13158,16 @@ evidence = [
   "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
 ]
 gaps = "1. 三个仓的新读数都是 2026-11-22 E156 落地后那一趟的现场值；快照 --force 推，旧 head 在远端已被覆盖，表下那句对照只能靠那三份作业日志复算，本卡没再推一趟去核对。见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节表下的对照段。2. dsh 那 39 条红是本机复现过的源仓欠账（本机 Tests 39 failed / 1158 passed），但套件计数两边不同（本机 59 / runner 131），这一项没查清，属源仓自己的事。读数取法见 scripts/cloud/gha/adapters/dsh.py。3. 本卡只动第 8.1 / 8.4 / 9 节：第 6 节那张逐门表没改，eng-gate 这一轮没有新读数，仍指 run 44930214907 那一趟。见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 6 节。"
+
+[entries."T-AG693"]
+id = "T-AG693"
+title = "GHA文档第6节换成骨架改完那一趟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "file:docs/changelog.d/T-AG693.md",
+  "file:docs/traceability.d/T-AG693.toml",
+  "file:复盘/交接.d/T-AG693.md",
+]
+gaps = "1. 那一趟 runner 读数（job 137046148410）是**从远端日志里解出来的**，本卡没有在本机复跑同一套 23 门；「本机也全绿」这件事由落地链自己的 --gate-on local 那一趟另行给出，两者不是同一次运行。证据形状不同的说明在 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 6 节。2. 逐门秒求和 2743.2 s 与上一趟那趟 4893.61 s 的差归因成「runner 负载」是**推理**，不是读数：同一 head 上没有一个「关掉负载后的对照趟」。能钉住的只有「两趟都是 23 门全绿、红门 0 个」这一条，判据集合没动这件事的静态证据在 scripts/cloud/gha/profiles/engineering.toml 与 scripts/run_gates.py。3. conftest 垫片从写死 tests/conftest.py 改成 profile 的 adapter.conftest_path 之后，engineering 仍走默认值这件事由 tests/test_gha_cloud_gate.py 的 profile 加载钉子守着；但「profile 里写错一个路径会在 runner 上以什么形状炸」只有 build 段的 CONFTEST 相关退出码兜着，没有一条真跑错路径的反向实验。"

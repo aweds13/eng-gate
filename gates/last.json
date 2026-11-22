@@ -1,13 +1,13 @@
 {
-  "rev": "015cf8d2",
+  "rev": "3385d275",
   "python": "3.14.6",
   "host": "DEV-HOST",
-  "tree": "6f66d142c3c541980b9ee9e35c961a85cb491a72",
+  "tree": "11ea026aa92b72faa808ff80d6c767b9ea024ed3",
   "tree_scope": "worktree-minus-gates",
-  "parent": "015cf8d2",
-  "branch": "card/E157",
+  "parent": "3385d275",
+  "branch": "card/E158",
   "dirty": true,
-  "at": "2026-11-22T08:50:20",
+  "at": "2026-11-22T09:36:02",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
@@ -17,7 +17,7 @@
   "co_tenants": {
     "collected": true,
     "like": 26,
-    "self_pid": 25492
+    "self_pid": 22544
   },
   "pytest_mode": "串行（worker=1）",
   "slow_doors": [],
@@ -25,43 +25,43 @@
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 12.79,
+      "seconds": 5.92,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 0.36,
+      "seconds": 0.22,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.53,
+      "seconds": 0.31,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 7.28,
+      "seconds": 3.74,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 18.95,
+      "seconds": 14.94,
       "summary": "report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
     },
     {
       "name": "contract_doc_table",
       "exit_code": 0,
-      "seconds": 0.28,
-      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E157\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+      "seconds": 0.17,
+      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E158\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
       "detail": ""
     }
   ],
@@ -69,7 +69,7 @@
   "excluded": {},
   "reused": {},
   "untracked": [],
-  "trailer": "【必需 audit；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E157\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+  "trailer": "【必需 audit；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E158\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
   "profiles_run": [
     "audit"
   ],
@@ -78,13 +78,13 @@
   ],
   "changed_paths": [
     "docs/INDEX.md",
-    "docs/changelog.d/T-AG692.md",
+    "docs/changelog.d/T-AG693.md",
     "docs/changelog.md",
     "docs/subsystems/ci/GitHub-Actions-云门禁.md",
-    "docs/traceability.d/T-AG692.toml",
+    "docs/traceability.d/T-AG693.toml",
     "docs/traceability.toml",
     "复盘/交接-重构进度.md",
-    "复盘/交接.d/T-AG692.md"
+    "复盘/交接.d/T-AG693.md"
   ],
   "select": {
     "changed": [
@@ -93,14 +93,14 @@
       "docs/subsystems/ci/GitHub-Actions-云门禁.md",
       "docs/traceability.toml",
       "复盘/交接-重构进度.md",
-      "docs/changelog.d/T-AG692.md",
-      "docs/traceability.d/T-AG692.toml",
-      "复盘/交接.d/T-AG692.md"
+      "docs/changelog.d/T-AG693.md",
+      "docs/traceability.d/T-AG693.toml",
+      "复盘/交接.d/T-AG693.md"
     ],
     "tests": [],
     "fallback": false,
     "reason": "只有记账/文档改动 ⇒ 没有代码用例要跑（全量仍在收口链 ④）",
     "gates": []
   },
-  "sealed_at": "2026-11-22T08:50:24"
+  "sealed_at": "2026-11-22T09:36:05"
 }
