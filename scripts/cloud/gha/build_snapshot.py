@@ -162,6 +162,31 @@ def _require_files(dst, paths):
     log("required files ok:", len(paths))
 
 
+def _install_extra_files(dst, items):
+    """profile 说「往快照里补这几件引导件」—— src 相对本目录，dst 相对快照根。
+
+    为什么需要它：镜像仓借的是**冻结的** windows workflow，那四步写死成
+    「actions/setup-python → pip install -e . "pytest>=8" → python -m pytest -q <适配器>」。
+    这对 Python 仓刚好，对 Node 仓（dsh-superagent-prototype）就是错配：没有 pyproject.toml，
+    第一步 pip install 就 exit 1，作业连适配器都没跑到（卡 E156 实测，日志原文
+    「does not appear to be a Python project」）。
+    补一份空的 pyproject.toml 只为了让那一步能过，跑什么仍由适配器说。
+    """
+    for item in items:
+        src = os.path.join(HERE, item["src"].replace("/", os.sep))
+        if not os.path.isfile(src):
+            log("MISSING_EXTRA_SRC", item["src"])
+            sys.exit(EXIT_CONFIG)
+        out = os.path.join(dst, item["dst"].replace("/", os.sep))
+        parent = os.path.dirname(out)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        shutil.copyfile(src, out)
+        log("extra file installed:", item["dst"], "<-", item["src"], os.path.getsize(out), "B")
+    if items:
+        log("extra files installed:", len(items))
+
+
 def _install_workflows(dst, items):
     """profile 说「给这个仓装一份自己的 workflow」—— src 相对本目录，dst 相对快照根。
 
@@ -264,6 +289,52 @@ def _restore_exec_bits(dst, paths):
     log("exec bits restored:", len(keep), "of", len(paths))
 
 
+def _install_adapter(dst, ad, adapter_src):
+    """把适配器装进快照，装到 workflow 会去跑的那个文件名上。"""
+    adapter_dst = os.path.join(dst, ad["snapshot_name"].replace("/", os.sep))
+    os.makedirs(os.path.dirname(adapter_dst), exist_ok=True)
+    shutil.copyfile(adapter_src, adapter_dst)
+    with open(adapter_dst, "rb") as fh:
+        data = fh.read()
+    if not data.endswith(b"\n"):
+        with open(adapter_dst, "ab") as fh:
+            fh.write(b"\n")
+        log("adapter trailing newline appended")
+    log("adapter installed:", ad["snapshot_name"], os.path.getsize(adapter_dst), "B")
+
+
+def _append_conftest_shim(dst, ad, shim_src):
+    """把垫片挂到 profile 指定的那份 conftest 上。
+
+    两条都是实测出来的：
+      * 落点写过 tests/conftest.py（engineering 的形状），但 framework 的 conftest 在树根、
+        dsh 与 UltraRAG 根本没有 conftest —— 写死 tests/ 的那三类仓一个都装不进去（卡 E156）。
+      * 目标文件不存在时**新建**：pytest 只要树根有 conftest.py 就会加载它，
+        「没有这个文件」不是「不该有垫片」。
+    """
+    rel = ad["conftest_path"]
+    cf = os.path.join(dst, rel.replace("/", os.sep))
+    with open(shim_src, "rb") as fh:
+        shimtxt = fh.read()
+    if os.path.exists(cf):
+        with open(cf, "rb") as fh:
+            body = fh.read()
+        if ad["conftest_marker"].encode("utf-8") in body:
+            log("CONFTEST_ALREADY_HAS_ADDOPTION")
+            sys.exit(EXIT_SNAPSHOT)
+        if not body.endswith(b"\n"):
+            body += b"\n"
+    else:
+        os.makedirs(os.path.dirname(cf) or dst, exist_ok=True)
+        body = b""
+    with open(cf, "wb") as fh:
+        fh.write(body + shimtxt)
+    if not body:
+        log("conftest created:", rel, len(shimtxt), "B")
+    else:
+        log("conftest shim appended:", len(shimtxt), "B")
+
+
 def do_build(a):
     root, dst = a.root, a.dest
     prof = a.profile
@@ -342,6 +413,7 @@ def do_build(a):
     p = sh(["git", "log", "--oneline", "-1"], cwd=dst, quiet=True)
     log("base:", (p.stdout or "").strip())
     _require_files(dst, snap["require_files"])
+    _install_extra_files(dst, snap["extra_files"])
 
     if snap["from_remote_workflows"]:
         # 浅 fetch 只用来拿**冻结的** .github（workflow 正文在远端那一份里，本 token 改不了它）
@@ -354,6 +426,22 @@ def do_build(a):
         if p is None or p.returncode != 0:
             log("WORKFLOW_CHECKOUT_FAILED")
             sys.exit(EXIT_HISTORY)
+        # checkout <rev> -- <path> 只覆盖同名文件，不删「源树有、远端没有」的那些残留。
+        # 残留的 workflow 会被 push 当成「新增 workflow」，而本 token 没有 workflow scope，
+        # 于是整趟推不上去（卡 E156 实测：ura-gate 的 ci-smoke.yml / dockerhub-nightly.yml
+        # 是上游自带的，镜像仓上从来没有过）。语义上也更对：from_remote_workflows = true
+        # 的意思就是「.github 逐字等于远端那份」。只删远端没有的，别整棵删 ——
+        # 那会把源树自己有、远端也有的东西一起抹掉。
+        p = sh(["git", "ls-tree", "-r", "--name-only", "FETCH_HEAD", "--", ".github"],
+               cwd=dst, quiet=True)
+        keep = set((p.stdout or "").split())
+        for dirpath, _dirnames, filenames in os.walk(os.path.join(dst, ".github")):
+            for fn in filenames:
+                full = os.path.join(dirpath, fn)
+                rel = os.path.relpath(full, dst).replace(os.sep, "/")
+                if rel not in keep:
+                    os.remove(full)
+                    log("stale file under .github removed:", rel)
     elif not os.path.isdir(os.path.join(dst, ".github", "workflows")):
         # profile 说「workflow 归本仓自己」⇒ 树里就必须真有它，否则推上去一条作业都不会起。
         log("MISSING_WORKFLOWS_IN_TREE")
@@ -385,31 +473,9 @@ def do_build(a):
 
     ad = prof["adapter"]
     if ad["enabled"]:
-        adapter_dst = os.path.join(dst, ad["snapshot_name"].replace("/", os.sep))
-        os.makedirs(os.path.dirname(adapter_dst), exist_ok=True)
-        shutil.copyfile(a.adapter, adapter_dst)
-        with open(adapter_dst, "rb") as fh:
-            data = fh.read()
-        if not data.endswith(b"\n"):
-            with open(adapter_dst, "ab") as fh:
-                fh.write(b"\n")
-            log("adapter trailing newline appended")
-        log("adapter installed:", ad["snapshot_name"], os.path.getsize(adapter_dst), "B")
-
+        _install_adapter(dst, ad, a.adapter)
         if ad["conftest_shim"]:
-            cf = os.path.join(dst, "tests", "conftest.py")
-            with open(cf, "rb") as fh:
-                body = fh.read()
-            with open(a.conftest_shim, "rb") as fh:
-                shimtxt = fh.read()
-            if b"pytest_addoption" in body:
-                log("CONFTEST_ALREADY_HAS_ADDOPTION")
-                sys.exit(EXIT_SNAPSHOT)
-            if not body.endswith(b"\n"):
-                body += b"\n"
-            with open(cf, "wb") as fh:
-                fh.write(body + shimtxt)
-            log("conftest shim appended:", len(shimtxt), "B")
+            _append_conftest_shim(dst, ad, a.conftest_shim)
 
     if snap["ledger_exempt"]:
         tr = os.path.join(dst, "docs", "traceability.toml")

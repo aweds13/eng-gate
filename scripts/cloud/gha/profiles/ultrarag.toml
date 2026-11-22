@@ -1,0 +1,42 @@
+# UltraRAG 仓的 GHA 门禁（卡 E156）。
+#
+# 这仨仓没有台账、没有仓外号池桩、没有证据文件、派生文档生成器也不归本仓；
+# workflow 仍然从远端取（镜像仓上的 ci.yml 是冻结的模板）。
+name = "ultrarag"
+message = "gate: UltraRAG tests on windows-latest (adapter: real pytest readout, faiss extra)"
+task = ""
+
+[remote]
+env = "GHA_REMOTE"
+transport = "ssh"
+branch = "main"
+
+[sync]
+# tree：源仓 455 笔历史、.git 86M，搬历史对 runner 没用，只要当前内容。
+mode = "tree"
+
+[snapshot]
+dir_name = "uragate"
+from_remote_workflows = true
+# ura 源仓**没有** conftest.py，垫片会新建一份 ⇒ 这里不能要求它在。
+require_files = ["pyproject.toml", "tests/servers/evaluation/test_normalize_text.py"]
+
+[adapter]
+enabled = true
+src = "adapters/ultrarag.py"
+snapshot_name = "tests/test_windows_autostart_e2e.py"
+conftest_shim = "conftest_reading.txt"
+# 源仓没有 conftest.py：构建器会在树根新建一份再追加垫片。
+conftest_path = "conftest.py"
+conftest_marker = "GHA-READING-HOOK"
+
+[pool]
+stub = false
+
+[smoke]
+# UltraRAG 那套依赖（fastmcp / pandas / faiss …）本机没有、装它要几分钟 ⇒ 冒烟只做**静态**判据，
+# 真读数由 runner 上那趟适配器出。这不是「配不上就跳过」，是「冒烟不许装依赖」。
+commands = [
+  { tag = "PYPROJECT_READABLE", cmd = "python -c \"import tomllib;d=tomllib.load(open('pyproject.toml','rb'));assert d['project']['requires-python']\"" },
+  { tag = "TESTS_PRESENT", cmd = "python -c \"import glob,sys;sys.exit(0 if glob.glob('tests/**/*.py',recursive=True) else 1)\"" },
+]

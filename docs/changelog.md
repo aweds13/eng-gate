@@ -15,6 +15,12 @@
 - `tools/wb_land.py` 的 `--allow` 与 `tools/pool/landing.py` 的 `--allow` / `--evidence` / `--affected` 四处改成 `action="extend"`（`nargs` 原值不动）：`--allow a --allow b c` 现在收到 `['a','b','c']`，老的单条多值写法逐字不变。根因是 argparse 默认 action 下重复开关只有最后一条生效、不报错不警告 —— 卡 E154 第一趟就这么丢掉 9 条 `--allow` 里的 8 条，提交 `c05b9b51` 只含派生物。
 - `tools/pool/landing.py` 新增 `dead_allow()` 与一处在 `staged_and_extra()` 之后的点名：卡域里有几条没进暂存区会打印出来，**一条都没生效**时再打一行 ★★。只点名、不改退出码（顺带声明的文件是合法用法；真正该拦的「计划外暂存」仍归 `extra`）。
 - 钉子三层：`tests/test_wb_land.py` 的端到端（重复给三个 `--allow`，两个改动文件都必须进提交；反向改回默认 action 会红，且红的样子精确复现 E154 的 `cannot rebase: You have unstaged changes.`）、`tests/test_pool_landing.py` 的三条 parser 级参数化（`--evidence` / `--allow` / `--affected`，都必须「先给一条再重复给」才咬得住）、`dead_allow()` 的纯函数钉子。
+## 2026-11-22 T-AG691 三仓适配层收进仓：fw / dsh / ura 用同一条构建器
+- `scripts/cloud/gha/adapters/{framework,dsh,ultrarag}.py` 与 `scripts/cloud/gha/conftest_reading.txt` 进仓（此前只在被 gitignore 挡着的一次性目录里）；三份 profile `scripts/cloud/gha/profiles/{framework,dsh,ultrarag}.toml` 里 `task = ""`、`pool.stub = false`、一条 engineering 专属键都没有。
+- 骨架 `[adapter]` 段新增 `conftest_path` / `conftest_marker`（默认值让 engineering 逐字不变）：垫片不再写死 `tests/conftest.py`，目标不存在就新建。
+- 骨架 `[snapshot]` 段新增 `extra_files`（item 类型 `srcdst`）+ `scripts/cloud/gha/extras/node-pyproject.toml`：Node 仓缺 pyproject.toml 时冻结 workflow 的 `pip install -e .` 会 exit 1，适配器一行都跑不到。
+- dsh 适配器改读 vitest 的 JSON reporter（`--reporter=json --outputFile`），不再从日志尾巴猜计数（上一版恒为 0：tail-25 被 annotation 挤掉 + runner 带 ANSI）。
+- `tests/test_gha_cloud_gate.py` 加八条钉子：三仓件在 git 里、三份 profile 无 engineering 五字面、适配器真在盘上、`conftest_path` 越界即拒、垫片新建与退 5、`extra_files` 装机与退 2、落 `.github` 下即拒。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

@@ -1,0 +1,43 @@
+# framework 仓的 GHA 门禁（卡 E156）。
+#
+# 跟 engineering 那一份的差别：这仨仓没有台账（task = ""）、没有仓外号池桩、没有证据文件、
+# 派生文档生成器也不归本仓；workflow 仍然从远端取（镜像仓上的 ci.yml 是冻结的模板），
+# 所以 from_remote_workflows = true。
+name = "framework"
+message = "gate: framework suite on windows-latest (adapter: real pytest readout)"
+task = ""
+
+[remote]
+env = "GHA_REMOTE"
+transport = "ssh"
+branch = "main"
+
+[sync]
+# tree：只取工作树当前内容。framework 源仓只有两笔历史，bundle 也打得出来，但镜像仓的形状
+# 是「源树 + 构建器装的那几件」，tree 与它一一对应，还省一次 fetch。
+mode = "tree"
+
+[snapshot]
+dir_name = "fwgate"
+# workflow 在镜像仓上冻结（本 token 没有 workflow scope，SSH deploy key 也被同一句拒）。
+from_remote_workflows = true
+require_files = ["conftest.py", "pyproject.toml", "pipeline.toml", "tests/test_gates_run.py"]
+
+[adapter]
+enabled = true
+src = "adapters/framework.py"
+snapshot_name = "tests/test_windows_autostart_e2e.py"
+conftest_shim = "conftest_reading.txt"
+# framework 的 conftest 在**树根**（源仓自带），不在 tests/ 下。
+conftest_path = "conftest.py"
+conftest_marker = "GHA-READING-HOOK"
+
+[pool]
+stub = false
+
+[smoke]
+# 冒烟不装依赖：framework 的 pyproject 没有第三方依赖，本机 python 就能跑它自己的 tests。
+python_targets = ["tests/test_genericity.py", "tests/test_scaffold.py"]
+# ruff 只扫**装进去的那份适配器**：framework 自己的 tests 有 48 条既有风格问题
+# （默认 88 列 / UP031…），那是源仓的债、与本卡无关；冒烟要判的是「我们装进去的东西干净」。
+ruff_paths = ["tests/test_windows_autostart_e2e.py"]

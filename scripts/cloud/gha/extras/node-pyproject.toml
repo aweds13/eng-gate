@@ -1,0 +1,18 @@
+# 给「冻结的 windows workflow 硬要 pip install -e .」的 Node 仓补的引导件（卡 E156）。
+#
+# 它唯一的用途是让那一步能过：容器里必须有一个 Python 项目，否则
+#   ERROR: file:///D:/a/dsh-gate/dsh-gate does not appear to be a Python project:
+#   neither 'setup.py' nor 'pyproject.toml' found.
+# 直接 exit 1，作业连适配器都没跑到。这个包是空的，不装任何东西、不碰依赖。
+# 这个仓真正跑什么，由 [adapter].src 那份适配器说（dsh 是 pnpm + vitest）。
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gate-shim-placeholder"
+version = "0.0.0"
+description = "Placeholder so the frozen windows workflow's pip install step can run; this repo is not a Python project."
+
+[tool.setuptools]
+packages = []

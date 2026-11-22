@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -25,7 +26,8 @@ import tomllib
 PROFILES = Path(__file__).resolve().parent / "profiles"
 
 #: 每仓一份适配层能说的**全部**键。四种类型：
-#:   str / bool / strlist（字符串列表）/ cmdlist（[{tag, cmd}] 的命令表）。
+#:   str / bool / strlist（字符串列表）/ cmdlist（[{tag, cmd}] 的命令表）/
+#:   srcdst（[{src, dst}] 的文件搬运表）。
 SCHEMA = {
     "name": ("str", ""),
     "message": ("str", ""),
@@ -63,19 +65,30 @@ SCHEMA = {
         "ledger_exempt": ("strlist", []),
         # 派生文档生成器：[{tag="GEN_XXX", cmd="scripts/gen_x.py --flag"}]。
         "generators": ("cmdlist", []),
+        # 往快照里补的引导件：[{src="", dst=""}]，src 相对本目录、dst 相对快照根。
+        # 用在「源仓不是 Python 项目，但远端冻结的 workflow 硬要 pip install -e .」这种错配上
+        # （卡 E156 实测：dsh 是 Node 仓，没有 pyproject.toml ⇒ 那一步 exit 1，连适配器都没跑到）。
+        "extra_files": ("srcdst", []),
     },
     "workflow": {
         # 装进快照的件：[{src="", dst=""}]，src 相对本目录、dst 相对快照根。
         # 有的仓 workflow 在远端冻结、改不了（engineering：本 token 没有 workflow scope）；
         # 有的仓归它自己（OpenMAIC：推上去就按树里那几份跑）—— 后者要给这道门单独装一份，
         # 因为它自己的 ci.yml 是给它自己用的，不认我们那套 BEGIN/END 读数。
-        "install": ("pairlist", []),
+        "install": ("srcdst", []),
     },
     "adapter": {
         "enabled": ("bool", False),
         "src": ("str", "adapter.py"),
         "snapshot_name": ("str", ""),
+        # 垫片文件（相对 scripts/cloud/gha/）；追加到快照里的哪份 conftest 由 conftest_path 决定。
         "conftest_shim": ("str", ""),
+        # 垫片挂在哪份 conftest 上（相对快照根）。默认 tests/conftest.py = engineering 的老形状；
+        # 树根就有 conftest.py 的仓（framework）或根本没有 conftest 的仓（dsh / UltraRAG）
+        # 必须把它指到 "conftest.py" —— 写死 tests/ 的话那两类仓连垫片都装不进去（卡 E156）。
+        "conftest_path": ("str", "tests/conftest.py"),
+        # 幂等判据：这份 conftest 里已经有这个字样 ⇒ 说明垫片装过了，退 5 而不是装第二份。
+        "conftest_marker": ("str", "pytest_addoption"),
         "diag_fixtures": ("bool", False),
     },
     "pool": {
@@ -144,6 +157,18 @@ def _check(where, value, kind):
                     where + "[" + str(i) + "] 必须是 {path=..., needle=...} 两项都有的表，现在是 "
                     + repr(item))
             for k in ("path", "needle"):
+                if not isinstance(item[k], str) or not item[k].strip():
+                    raise ProfileError(where + "[" + str(i) + "]." + k + " 必须是非空字符串")
+        return
+    if kind == "srcdst":
+        if not isinstance(value, list):
+            raise ProfileError(where + " 必须是表数组，现在是 " + repr(value))
+        for i, item in enumerate(value):
+            if not isinstance(item, dict) or set(item) != {"src", "dst"}:
+                raise ProfileError(
+                    where + "[" + str(i) + "] 必须是 {src=..., dst=...} 两项都有的表，现在是 "
+                    + repr(item))
+            for k in ("src", "dst"):
                 if not isinstance(item[k], str) or not item[k].strip():
                     raise ProfileError(where + "[" + str(i) + "]." + k + " 必须是非空字符串")
         return
@@ -236,6 +261,32 @@ def _cross_check(path, out):
         raise ProfileError(
             path.name + ": [adapter].diag_fixtures = true 但没有适配器 —— 那些 fixture 是"
             "适配器运行时现写的，没适配器就没有人写它们")
+    cp = out["adapter"]["conftest_path"]
+    if cp.startswith("/") or "\\" in cp or ".." in cp.split("/"):
+        raise ProfileError(
+            path.name + ": [adapter].conftest_path = " + repr(cp)
+            + " 必须是快照内的相对路径（POSIX 分隔符）—— 垫片只往快照里写，不许写到外面")
+    if not out["adapter"]["conftest_marker"].strip():
+        raise ProfileError(
+            path.name + ": [adapter].conftest_marker 不能为空 —— 它是「垫片装过没有」的唯一依据，"
+            "空串会让每一趟都判定成没装过")
+    tuned = (cp != "tests/conftest.py"
+             or out["adapter"]["conftest_marker"] != "pytest_addoption")
+    if tuned and not out["adapter"]["conftest_shim"]:
+        raise ProfileError(
+            path.name + ": 调了 conftest_path / conftest_marker 却没有 conftest_shim"
+            " —— 没有垫片文件，这两个键没人读")
+    for item in out["snapshot"]["extra_files"]:
+        dst = item["dst"]
+        if dst.startswith("/") or ".." in dst.split("/"):
+            raise ProfileError(
+                path.name + ": [snapshot].extra_files 里 " + repr(dst)
+                + " 必须是快照内的相对路径（这些是往快照里补的引导件，不许写到外面）")
+        if dst.replace(os.sep, "/").startswith(".github/"):
+            raise ProfileError(
+                path.name + ": [snapshot].extra_files 里 " + repr(dst)
+                + " 落在 .github/ 下 —— workflow 归 [workflow].install 管，"
+                "这里写会被 from_remote_workflows 的远端那份盖掉")
     for item in out["workflow"]["install"]:
         if item["dst"].startswith("/") or ".." in item["dst"].split("/"):
             raise ProfileError(

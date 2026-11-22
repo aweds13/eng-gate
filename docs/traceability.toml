@@ -13127,3 +13127,24 @@ evidence = [
   "file:tests/conftest.py",
 ]
 gaps = "- 判据 4 的「点名」只打印、不改退出码 —— 这是刻意的：`--allow` 里带一个「这次没改、只是顺带声明」的文件是合法用法（真源 `tools/pool/landing.py` 的 `dead_allow()` docstring）。于是「卡域整个没生效」仍然是**看得见但拦不住**：它留一行 ★★ 字，真正停手仍靠 `extra` 那条判据。判据面在 `tools/pool/landing.py`。- 本卡只修 argparse 的静默覆盖，没修「E154 那笔 `c05b9b51` 只含派生物」这个既成事实 —— 那笔已被后续 `fadb0e12` 覆盖（内容改动最终进了库），本卡不改写历史提交。判据面见 `复盘/卡/卡E155-重复allow被静默丢弃.md`。- 反向验证是**手工做的**（把 `action=「extend」, ` 全删再跑、红、还原），仓里没有一条常驻的「变异测试」判据；万一将来有人把某处 extend 改回去，只有 `tests/test_pool_landing.py` 的三条参数化会红（期望值必须先给一条再重复给才咬得住，这一点写在钉子的 docstring 里）。判据面在 `tests/test_pool_landing.py`。- `tools/wb_land.py` 这个文件的**库内行尾是 CR CR LF**（`i/-text`，625 处），与仓里其余文件（`i/lf w/crlf`）不同；本轮改它时必须按原字节写回，否则整文件被当成重写（`git diff` 会显示 1246 行）。真源 `git ls-files --eol tools/wb_land.py`。- 三道文档门读数（卡树现跑）：死指针 147（基线 147，+0）/ `check_layers.py` PASS / 派生文档双 OK；真源 `scripts/check_docs.py` 与 `docs/doc-debt-baseline.toml`。"
+
+[entries."T-AG691"]
+id = "T-AG691"
+title = "三仓适配层收进仓：fw / dsh / ura 用同一条构建器"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/cloud/gha/gate_profile.py",
+  "file:scripts/cloud/gha/build_snapshot.py",
+  "file:scripts/cloud/gha/adapters/dsh.py",
+  "file:scripts/cloud/gha/adapters/framework.py",
+  "file:scripts/cloud/gha/adapters/ultrarag.py",
+  "file:scripts/cloud/gha/conftest_reading.txt",
+  "file:scripts/cloud/gha/extras/node-pyproject.toml",
+  "file:scripts/cloud/gha/profiles/framework.toml",
+  "file:scripts/cloud/gha/profiles/dsh.toml",
+  "file:scripts/cloud/gha/profiles/ultrarag.toml",
+  "file:tests/test_gha_cloud_gate.py",
+  "test:test_gha_cloud_gate.py",
+]
+gaps = "- 本卡实际**推了三个镜像仓**（framework / dsh / ultrarag），与规格「不许推任何镜像仓」不符 —— 推是因为读数只能在 GitHub 上取。后续同类卡要么在规格里写明允许推，要么把「取读数」拆成独立一张卡，别再写一条自己会违反的禁令。判据面见 `scripts/cloud/gha/build_snapshot.py` 的 `do_push`。- dsh 那趟读数真的判出了数（不再是 0）：1158 passed / 39 failed。本机同一份树跑同一套 vitest 也是 39 failed / 1158 passed（1197 例），用例计数逐字相同 ⇒ 那 39 条是源仓自己的欠账；但**套件**计数两边不同（本机 9 failed / 50 passed，runner 16 failed / 115），这一项没查清。可见的只有 `scripts/cloud/gha/adapters/dsh.py` 里那套 JSON reporter 取数。- 三仓的真读数只在 GHA job 日志里（仓外、未跟踪），仓内能查的只有适配器与 profile 本身：`scripts/cloud/gha/adapters/dsh.py`、`scripts/cloud/gha/profiles/framework.toml`。规律同 engineering 那条腿：读数靠仓外 job 日志，仓内不存副本。- framework 与 ultrarag 的冒烟只做静态判据（不装依赖）：framework 只扫装进快照的那份适配器（`scripts/cloud/gha/profiles/framework.toml` 的 `ruff_paths`），UltraRAG 只读 pyproject 与 tests 目录。真正的 pytest 只能靠 runner。- `docs/subsystems/ci/GitHub-Actions-云门禁.md` §9 那张五仓表里 fw / dsh / ura 三行仍是上一轮的旧 head，本卡不在交付面内，没动它。"

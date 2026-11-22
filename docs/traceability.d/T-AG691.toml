@@ -1,0 +1,21 @@
+[entries."T-AG691"]
+id = "T-AG691"
+title = "三仓适配层收进仓：fw / dsh / ura 用同一条构建器"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:scripts/cloud/gha/gate_profile.py",
+  "file:scripts/cloud/gha/build_snapshot.py",
+  "file:scripts/cloud/gha/adapters/dsh.py",
+  "file:scripts/cloud/gha/adapters/framework.py",
+  "file:scripts/cloud/gha/adapters/ultrarag.py",
+  "file:scripts/cloud/gha/conftest_reading.txt",
+  "file:scripts/cloud/gha/extras/node-pyproject.toml",
+  "file:scripts/cloud/gha/profiles/framework.toml",
+  "file:scripts/cloud/gha/profiles/dsh.toml",
+  "file:scripts/cloud/gha/profiles/ultrarag.toml",
+  "file:tests/test_gha_cloud_gate.py",
+  "test:test_gha_cloud_gate.py",
+]
+gaps = "- 本卡实际**推了三个镜像仓**（framework / dsh / ultrarag），与规格「不许推任何镜像仓」不符 —— 推是因为读数只能在 GitHub 上取。后续同类卡要么在规格里写明允许推，要么把「取读数」拆成独立一张卡，别再写一条自己会违反的禁令。判据面见 `scripts/cloud/gha/build_snapshot.py` 的 `do_push`。- dsh 那趟读数真的判出了数（不再是 0）：1158 passed / 39 failed。本机同一份树跑同一套 vitest 也是 39 failed / 1158 passed（1197 例），用例计数逐字相同 ⇒ 那 39 条是源仓自己的欠账；但**套件**计数两边不同（本机 9 failed / 50 passed，runner 16 failed / 115），这一项没查清。可见的只有 `scripts/cloud/gha/adapters/dsh.py` 里那套 JSON reporter 取数。- 三仓的真读数只在 GHA job 日志里（仓外、未跟踪），仓内能查的只有适配器与 profile 本身：`scripts/cloud/gha/adapters/dsh.py`、`scripts/cloud/gha/profiles/framework.toml`。规律同 engineering 那条腿：读数靠仓外 job 日志，仓内不存副本。- framework 与 ultrarag 的冒烟只做静态判据（不装依赖）：framework 只扫装进快照的那份适配器（`scripts/cloud/gha/profiles/framework.toml` 的 `ruff_paths`），UltraRAG 只读 pyproject 与 tests 目录。真正的 pytest 只能靠 runner。- `docs/subsystems/ci/GitHub-Actions-云门禁.md` §9 那张五仓表里 fw / dsh / ura 三行仍是上一轮的旧 head，本卡不在交付面内，没动它。"
+

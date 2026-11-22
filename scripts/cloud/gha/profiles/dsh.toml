@@ -1,0 +1,49 @@
+# dsh-superagent-prototype 仓的 GHA 门禁（卡 E156）。
+#
+# 这仨仓没有台账、没有仓外号池桩、没有证据文件、派生文档生成器也不归本仓；
+# workflow 仍然从远端取（镜像仓上的 ci.yml 是冻结的模板）。
+name = "dsh"
+message = "gate: dsh-superagent-prototype vitest on windows-latest (adapter: real vitest readout)"
+task = ""
+
+[remote]
+env = "GHA_REMOTE"
+transport = "ssh"
+branch = "main"
+
+[sync]
+# tree：源仓只有一笔历史（rev-list --count HEAD = 1），搬历史等于搬那一笔，tree 更直白。
+mode = "tree"
+
+[snapshot]
+dir_name = "dshgate"
+from_remote_workflows = true
+# dsh 源仓没有 conftest.py、没有 pyproject.toml（镜像仓那两份是构建器写的引导壳）。
+require_files = ["package.json", "pnpm-lock.yaml", "vitest.config.ts", "tests/store.spec.ts"]
+# 冻结的 windows workflow 硬要 `pip install -e . "pytest>=8"`；这是 Node 仓，没有 pyproject.toml
+# ⇒ 那一步 exit 1，作业连适配器都跑不到（卡 E156 实测，日志原文
+# `ERROR: file:///D:/a/dsh-gate/dsh-gate does not appear to be a Python project`）。
+# 补一份空的占位件只为了让那一步能过，跑什么仍由适配器说。
+extra_files = [
+  { src = "extras/node-pyproject.toml", dst = "pyproject.toml" },
+]
+
+[adapter]
+enabled = true
+src = "adapters/dsh.py"
+snapshot_name = "tests/test_windows_autostart_e2e.py"
+conftest_shim = "conftest_reading.txt"
+# 源仓没有 conftest.py：构建器在树根新建一份（pytest 会去加载它）。
+conftest_path = "conftest.py"
+conftest_marker = "GHA-READING-HOOK"
+
+[pool]
+stub = false
+
+[smoke]
+# 冒烟不装依赖：pnpm install 要 20 秒以上、还会改 pnpm-lock.yaml（实测），
+# 它属于 runner 的事。这里只做静态判据 —— 树是不是 dsh 那棵、引擎约束是不是它那句。
+commands = [
+  { tag = "NODE_ENGINE", cmd = "python -c \"import json;d=json.load(open('package.json'));assert '22.19.0' in d['engines']['node'], d['engines']\"" },
+  { tag = "VITEST_INCLUDE", cmd = "python -c \"import sys;s=open('vitest.config.ts',encoding='utf-8').read();sys.exit(0 if 'tests/**/*.spec' in s else 1)\"" },
+]

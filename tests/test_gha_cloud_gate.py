@@ -554,3 +554,155 @@ def test_rewrite_projects_root_missing_file_is_pool_code_not_traceback(tmp_path,
     assert (stub / "projects.toml").read_text(encoding="utf-8").strip() == (
         'root = "' + snap.as_posix() + '"'
     )
+
+
+# ---------------------------------------------------------------------------
+# 卡 E156：三仓适配层收进仓 —— 适配器与 profile 在仓里，不是一次性脚本。
+# ---------------------------------------------------------------------------
+
+#: 第二波三仓：它们的适配器与 profile 一旦只在盘上，本机盘一没就再推不出来。
+THREE_REPO_PROFILES = ("framework", "dsh", "ultrarag")
+
+
+def test_three_repo_adapters_and_profiles_are_in_git():
+    """判据 1：三份适配器 + 三份 profile + 读数垫片都在 git 里（不是只躺在盘上）。"""
+    out = _run(["git", "ls-files", "--", "scripts/cloud/gha"]).stdout
+    tracked = {ln.strip() for ln in out.splitlines() if ln.strip()}
+    wanted = [GHA / "adapters" / (n + ".py") for n in THREE_REPO_PROFILES]
+    wanted += [PROFILES / (n + ".toml") for n in THREE_REPO_PROFILES]
+    wanted.append(GHA / "conftest_reading.txt")
+    for p in wanted:
+        rel = p.relative_to(ROOT).as_posix()
+        assert rel in tracked, f"{rel} 没进 git —— 只在盘上的适配层换个机器就没了"
+
+
+def test_three_repo_profiles_have_no_engineering_keys():
+    """判据 3：三份新 profile 正文不含 engineering 的五个字面（换了仓就得换适配层）。"""
+    literals = ("TF_PROJECTS_TOML", "models.whitelist.toml", "line/impl-v1",
+                "T-AG526", "gate: engineering")
+    guilty = []
+    for name in THREE_REPO_PROFILES:
+        text = (PROFILES / (name + ".toml")).read_text(encoding="utf-8")
+        for lit in literals:
+            if lit in text:
+                guilty.append(f"{name}.toml <- {lit}")
+    assert not guilty, (
+        f"这三份 profile 里还有 engineering 专属的 {guilty} —— 照抄一份 engineering 的"
+        "适配层，换个仓就再抄一份，两份必然各自漂移"
+    )
+
+
+def test_every_profile_adapter_src_exists_on_disk():
+    """判据 5①：每份 profile 指的那份适配器都得真在盘上（拼错了就静默退化成配不上就跑）。"""
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_adapter_src")
+    missing = []
+    for name in mod.list_repos():
+        prof = mod.load(name)
+        ad = prof["adapter"]
+        if not ad["enabled"]:
+            continue
+        if not (GHA / ad["src"]).is_file():
+            missing.append(f"{name}.toml -> {ad['src']}")
+        shim = ad["conftest_shim"]
+        if shim and not (GHA / shim).is_file():
+            missing.append(f"{name}.toml -> {shim}")
+    assert not missing, f"profile 指的件不在盘上：{missing}"
+
+
+def test_conftest_path_escaping_the_snapshot_is_rejected_at_load(tmp_path):
+    """判据 5③：conftest_path 绝对路径或含两点相对 ⇒ 加载即拒（垫片只往快照里写）。"""
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_conftest_path")
+    body = (
+        'name = "probe"\n'
+        'message = "gate: probe 1 gate"\n'
+        "[remote]\n"
+        'transport = "https"\n'
+        "[adapter]\n"
+        "enabled = true\n"
+        'src = "adapters/dsh.py"\n'
+        'snapshot_name = "tests/test_windows_autostart_e2e.py"\n'
+        'conftest_shim = "conftest_reading.txt"\n'
+        'conftest_path = "%s"\n'
+        'conftest_marker = "GHA-READING-HOOK"\n'
+    )
+    for bad in ("/etc/conftest.py", "../outside/conftest.py", "tests\\conftest.py"):
+        prof = tmp_path / "probe.toml"
+        prof.write_text(body % bad, encoding="utf-8")
+        with pytest.raises(mod.ProfileError) as exc:
+            mod.load(str(prof))
+        assert "conftest_path" in str(exc.value), str(exc.value)
+
+    # 反面：快照内相对路径 ⇒ 通过（否则这条判据就是永远红）
+    prof = tmp_path / "probe.toml"
+    prof.write_text(body % "conftest.py", encoding="utf-8")
+    assert mod.load(str(prof))["adapter"]["conftest_path"] == "conftest.py"
+
+
+def test_conftest_shim_creates_the_file_when_the_repo_has_none(tmp_path, capsys):
+    """判据 5④正面：目标 conftest 不存在 ⇒ 新建（UltraRAG / dsh 源仓都没有根 conftest.py）。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_shim_create")
+    ad = {"conftest_path": "conftest.py", "conftest_marker": "GHA-READING-HOOK"}
+    mod._append_conftest_shim(str(tmp_path), ad, str(GHA / "conftest_reading.txt"))
+    out = tmp_path / "conftest.py"
+    assert out.is_file(), "没有根 conftest.py 的仓必须能新建一份 —— 否则垫片永远装不上"
+    body = out.read_text(encoding="utf-8")
+    assert "GHA-READING-HOOK" in body, "新建出来的那份里没有 marker"
+    assert "pytest_terminal_summary" in body, "新建出来的那份里没有钩子"
+    printed = capsys.readouterr().out
+    assert "conftest created" in printed, "新建了却没说 —— 事后查不出这份是谁造的"
+
+
+def test_conftest_shim_is_idempotent_on_the_marker(tmp_path, capsys):
+    """判据 5④反面：marker 已命中 ⇒ 退 5（不许把垫片追加第二遍）。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_shim_idem")
+    (tmp_path / "tests").mkdir()
+    existing = tmp_path / "tests" / "conftest.py"
+    existing.write_text("# GHA-READING-HOOK\ndef pytest_terminal_summary(t, e, c):\n    pass\n",
+                        encoding="utf-8")
+    before = existing.read_bytes()
+    ad = {"conftest_path": "tests/conftest.py", "conftest_marker": "GHA-READING-HOOK"}
+    with pytest.raises(SystemExit) as exc:
+        mod._append_conftest_shim(str(tmp_path), ad, str(GHA / "conftest_reading.txt"))
+    assert exc.value.code == mod.EXIT_SNAPSHOT, (
+        f"装第二遍却退了 {exc.value.code}（5 才是快照形状不对）"
+    )
+    assert "CONFTEST_ALREADY_HAS_ADDOPTION" in capsys.readouterr().out
+    assert existing.read_bytes() == before, "拒了却已经把文件改了 —— 那不是幂等"
+
+
+def test_extra_files_installer_feeds_the_frozen_workflow(tmp_path, capsys):
+    """判据 1 补：extra_files 能把引导件搬进快照（Node 仓缺 pyproject.toml）。"""
+    mod = _load(BUILD, "gha_build_snapshot_for_extra_files")
+    mod._install_extra_files(str(tmp_path), [{"src": "extras/node-pyproject.toml",
+                                             "dst": "pyproject.toml"}])
+    out = tmp_path / "pyproject.toml"
+    assert out.is_file(), "引导件没落进快照 —— 冻结的 workflow 那步 pip install 还会 exit 1"
+    assert out.read_bytes() == (GHA / "extras" / "node-pyproject.toml").read_bytes()
+    assert "extra file installed" in capsys.readouterr().out
+
+    # 缺源 ⇒ 退 2（配置问题），不是 traceback
+    with pytest.raises(SystemExit) as exc:
+        mod._install_extra_files(str(tmp_path), [{"src": "extras/no-such.toml",
+                                                 "dst": "pyproject.toml"}])
+    assert exc.value.code == mod.EXIT_CONFIG
+    assert "MISSING_EXTRA_SRC" in capsys.readouterr().out
+
+
+def test_extra_files_under_dot_github_are_rejected_at_load(tmp_path):
+    """跨键约束：extra_files 落在 .github 目录下 ⇒ 加载即拒（那里归 [workflow].install）。"""
+    mod = _load(PROFILE_LOADER, "gha_gate_profile_for_extra_files")
+    prof = tmp_path / "probe.toml"
+    prof.write_text(
+        'name = "probe"\n'
+        'message = "gate: probe 1 gate"\n'
+        "[remote]\n"
+        'transport = "https"\n'
+        "[snapshot]\n"
+        "extra_files = [\n"
+        '  { src = "extras/node-pyproject.toml", dst = ".github/workflows/x.yml" },\n'
+        "]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(mod.ProfileError) as exc:
+        mod.load(str(prof))
+    assert "extra_files" in str(exc.value) and ".github" in str(exc.value), str(exc.value)
