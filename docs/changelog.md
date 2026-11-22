@@ -21,6 +21,12 @@
 - 骨架 `[snapshot]` 段新增 `extra_files`（item 类型 `srcdst`）+ `scripts/cloud/gha/extras/node-pyproject.toml`：Node 仓缺 pyproject.toml 时冻结 workflow 的 `pip install -e .` 会 exit 1，适配器一行都跑不到。
 - dsh 适配器改读 vitest 的 JSON reporter（`--reporter=json --outputFile`），不再从日志尾巴猜计数（上一版恒为 0：tail-25 被 annotation 挤掉 + runner 带 ANSI）。
 - `tests/test_gha_cloud_gate.py` 加八条钉子：三仓件在 git 里、三份 profile 无 engineering 五字面、适配器真在盘上、`conftest_path` 越界即拒、垫片新建与退 5、`extra_files` 装机与退 2、落 `.github` 下即拒。
+## 2026-11-22 T-AG692 GHA 文档第 9 节三行读数换成 E156 那三趟，旧口径一次清掉
+
+- 第 9 节表里 fw-gate / dsh-gate / ura-gate 三行换成本轮真读数：951faea6（55 passed）/ 1f9fde2c（1158 passed / 39 failed / files_failed 16）/ ba09e3f7（23 passed），各带 run id、Windows 作业 id 与作业耗时（41 s / 279 s / 93 s）。
+- 删掉末段那句已被推翻的「dsh 的 passed / failed 都是 0」，换成计数怎么来的（vitest 的 JSON reporter 写报告，适配器读它）与 1158 / 39 / 1197 三个真数。
+- 第 8.4 节第 3 条从「形状不统一、那是另一张卡的活」改写成本轮事实：engineering 与三仓都是 BEGIN/END JSON，只剩 om-gate 没有适配器还是四段汇总行；第 2 条补上理由（五仓都走 from_remote_workflows，所以 workflow.install 仍无消费者）。
+- 第 8.1 节抬头加一句「目录里现在有五份」，说明另外三份的差别集中在 conftest_path / extra_files / 冒烟形态。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

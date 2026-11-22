@@ -266,6 +266,10 @@ python -X utf8 scripts/cloud/gha/build_snapshot.py --repo openmaic    --stage al
 
 ### 8.1 两份 profile 的差别（就是「仓无关」的全部内容）
 
+目录里现在有五份（卡 E156 又收进了 `framework` / `dsh` / `ultrarag`）。下表仍只逐键比 engineering 与 openmaic ——
+另外三份的差别集中在「`adapter.conftest_path` 落在树根还是 `tests/`」「要不要 `snapshot.extra_files` 补引导件」
+「冒烟跑静态判据还是定向 pytest」，共同点都是 `sync.mode = tree` + `from_remote_workflows = true` + `pool.stub = false`。
+
 | 键 | `profiles/engineering.toml` | `profiles/openmaic.toml` | 为什么不同 |
 |---|---|---|---|
 | `sync.mode` | `bundle`（整段历史） | `tree`（只要当前树内容） | OpenMAIC 的源树是**浅克隆**，`git bundle create` 打出来是断链，fetch 报 `did not send all necessary objects` —— 那不是网络坏，是历史不完整；这条路本来也不要它的历史 |
@@ -319,12 +323,13 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
 
 1. **仍然改不了 workflow**：本机的 token 没有 workflow scope（§2、§7.1）。om-gate 的 `ci.yml` 不是我们改的，
    它原本就在那棵树里、原本就按 `--shard=N/4` 跑。要换触发条件 / 换 `runs-on`，同样得有 workflow scope。
-2. **`[workflow].install` 这条键今天没有使用者**：它是给「仓自己的 workflow 不认我们这套 BEGIN/END 读数、
-   但仓又能自己写 workflow」的那种仓准备的。两个仓都不在这个交集里 —— engineering 改不了，OpenMAIC 不需要。
-   键留着，但没跑过就别说它行。
-3. **读数的形状不一样**：engineering 那边是适配器把 `gates/last.json` 包在 `=== GHA-GATE-READING-BEGIN/END ===`
-   里打出来（一个 JSON，23 道门）；OpenMAIC 那边是 vitest 自己的四段汇总行，没有统一的 JSON 外壳。
-   想要统一形状，得给第二仓写一个适配器 + 装一份自己的 workflow —— 那是另一张卡的活。
+2. **`[workflow].install` 这条键今天仍然没有使用者**：它是给「仓自己的 workflow 不认我们这套 BEGIN/END 读数、
+   但仓又能自己写 workflow」的那种仓准备的。E156 之后五个仓都走 `snapshot.from_remote_workflows = true`
+   （镜像仓上冻结的就是模板带过来的那份），所以这条键**连一个消费者都没有**。键留着，但没跑过就别说它行。
+3. **读数的形状已经收拢，只剩一处不统一**：engineering 与 E156 收进来的三仓（`framework` / `dsh` / `ultrarag`）
+   都是适配器把结果写成 JSON、再包在 `=== GHA-GATE-READING-BEGIN/END ===` 里打出来（engineering 那份是 23 道门，
+   三仓是 `passed` / `failed` / `red` 那几个字段）。不统一的只剩 `om-gate`：它 `adapter.enabled = false`（§8.1 那张表），
+   读数是 vitest 自己的四段汇总行，没有 JSON 外壳 —— 要统一它，得先能往那个仓装一份自己的 workflow（第 1 条）。
 
 ## 9. 五个仓都在 GitHub 上跑：谁跑什么、读数在哪（2026-11-22 现读）
 
@@ -335,9 +340,13 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
 |---|---|---|---|---|---|
 | `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `7ec400f0` / run `44930214907` / `Windows HKCU autostart E2E` `136924983162` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 4893.61 s（§6） |
 | `aweds13/om-gate` | **public** | `OpenMAIC` | 它自己 `ci.yml` 的 `unit` 四片 `vitest run --shard=N/4` | `92f3c6fe` / run `44753382083` / `Unit Tests (N/4)` × 4 | 用例 64 failed / 14727 passed / 448 skipped，四片相加 ≈ 717.7 s（§8.3） |
-| `aweds13/fw-gate` | private | `framework` | 那棵树自己的 `pytest`（适配器打 JSON） | `f31972d7` / run `44892725961` / `136811824353` | `{"ok": true, "returncode": 0, "suite": "tests", "passed": 55, "failed": 0}`，作业 25 s |
-| `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run`（不分片） | `9bbc4a0a` / run `44896327615` / `136822660424` | `ok=false`：44 个用例文件、1 条 FAIL（下面第 3 条），vitest 段 241.3 s |
-| `aweds13/ura-gate` | private | `UltraRAG` | 那棵树自己的 `pytest` + `faiss-cpu` extra | `dc6fcb9e` / run `44898028812` / `136827750756` | `{"ok": true, "extras_rc": 0, "passed": 23, "failed": 0}`，作业 123 s |
+| `aweds13/fw-gate` | private | `framework` | 那棵树自己的 `pytest`（适配器打 JSON） | `951faea6` / run `44959470353` / `137014874255` | `{"ok": true, "returncode": 0, "suite": "tests", "passed": 55, "failed": 0, "errors": 0, "skipped": 0, "red": []}`，作业 41 s |
+| `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run --reporter=json`（不分片） | `1f9fde2c` / run `44959511018` / `137015005171` | `{"ok": false, "suite": "vitest", "passed": 1158, "failed": 39, "skipped": 0, "files_failed": 16, "files_passed": 115}`（`numTotalTests 1197` / `numTotalTestSuites 131`），作业 279 s |
+| `aweds13/ura-gate` | private | `UltraRAG` | 那棵树自己的 `pytest` + `faiss-cpu` extra | `ba09e3f7` / run `44959573211` / `137015193514` | `{"ok": true, "returncode": 0, "extras": ["faiss-cpu"], "extras_rc": 0, "passed": 23, "failed": 0, "errors": 0, "red": []}`，作业 93 s |
+
+表里 `fw` / `dsh` / `ura` 三行的旧读数（`f31972d7` / `9bbc4a0a` / `dc6fcb9e`）是**一次性构建器**推的，
+仓里没有对应的 profile，推它的脚本也没进提交面 ⇒ 那三趟只作对照，不再可复跑；
+现在这三行是 E156 之后用 `--repo framework` / `--repo dsh` / `--repo ultrarag` 复跑出来的（快照 `--force` 推，旧 head 在远端已被覆盖）。
 
 三条要说清楚的事：
 
@@ -353,11 +362,14 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
    而 NTFS 上 `0o700` 目录 / `0o600` 文件会落成 `438`（`0o666` 家族）。要它绿只有两条路：换 Linux runner，或让那条判据认平台 ——
    两条都超出「搬上去跑」这件事，留给源仓自己定。
 
-★ 读数的形状**今天不统一**：`eng-gate` 是一段 BEGIN/END 包着的 JSON（23 道门），`fw-gate` / `ura-gate` 是较小的 JSON（`passed` / `failed` / `red`），
-`dsh-gate` 是带 `steps` 的 JSON（`node --version` / `pnpm --version` / `install` / `vitest run` 各自的 rc；
-**注意它的 `passed` / `failed` 都是 0** —— 适配器没解析计数，真实结果只有 vitest 自己的 `[43/44]` `[44/44]` 与那一行 FAIL 能看出来），
-`om-gate` 干脆是 vitest 自己的四段汇总行。这不只是「不好看」：想用一条命令把五个仓的读数收成一张表，得先各自写提取器。
-要统一就得给每仓写适配器 + 装一份自己的 workflow —— 而 workflow 今天就写不进去（§7 第 1 条、§8.4 第 1 条）。
+★ 读数的形状**在 E156 之后收拢了，剩一处**：`eng-gate` 是 BEGIN/END 包着的 JSON（23 道门），
+`fw-gate` / `ura-gate` / `dsh-gate` 是同一套外壳下的 JSON —— `fw-gate` / `ura-gate` 给 `passed` / `failed` / `red`，
+`dsh-gate` 另带 `steps`（`node --version` / `pnpm --version` / `install` / `vitest run` 各自的 rc）与 `counts`。
+`dsh-gate` 的计数**现在是真的**：适配器用 `--reporter=json --outputFile` 收一份 `vitest` 的 JSON 报告再读它
+（`passed` 1158 / `failed` 39 / `numTotalTests` 1197 / `numFailedTestSuites` 16 / `numPassedTestSuites` 115），
+不再是早先那种 tail 解析出来的 0 / 0。只剩 `om-gate` 还是 vitest 自己的四段汇总行（它 `adapter.enabled = false`）——
+要统一它得先能往那个仓装一份自己的 workflow，而 workflow 今天就写不进去（§7 第 1 条、§8.4 第 1 条）。
+三仓的适配器与 profile 在 `scripts/cloud/gha/adapters/` 与 `scripts/cloud/gha/profiles/`（卡 E156 收进来的，之前只在 `gates/diag/` 里有一份一次性的）。
 
 ★ **workflow scope 的实测轮次**（省得下次再猜）：本机 token 的 scopes 是 `gist` / `read:org` / `repo` / `user`，没有 `workflow`。
 除 `git push` 被明拒（报 `refusing to allow an OAuth App to create or update workflow ... without workflow scope`）之外，

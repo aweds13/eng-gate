@@ -13148,3 +13148,13 @@ evidence = [
   "test:test_gha_cloud_gate.py",
 ]
 gaps = "- 本卡实际**推了三个镜像仓**（framework / dsh / ultrarag），与规格「不许推任何镜像仓」不符 —— 推是因为读数只能在 GitHub 上取。后续同类卡要么在规格里写明允许推，要么把「取读数」拆成独立一张卡，别再写一条自己会违反的禁令。判据面见 `scripts/cloud/gha/build_snapshot.py` 的 `do_push`。- dsh 那趟读数真的判出了数（不再是 0）：1158 passed / 39 failed。本机同一份树跑同一套 vitest 也是 39 failed / 1158 passed（1197 例），用例计数逐字相同 ⇒ 那 39 条是源仓自己的欠账；但**套件**计数两边不同（本机 9 failed / 50 passed，runner 16 failed / 115），这一项没查清。可见的只有 `scripts/cloud/gha/adapters/dsh.py` 里那套 JSON reporter 取数。- 三仓的真读数只在 GHA job 日志里（仓外、未跟踪），仓内能查的只有适配器与 profile 本身：`scripts/cloud/gha/adapters/dsh.py`、`scripts/cloud/gha/profiles/framework.toml`。规律同 engineering 那条腿：读数靠仓外 job 日志，仓内不存副本。- framework 与 ultrarag 的冒烟只做静态判据（不装依赖）：framework 只扫装进快照的那份适配器（`scripts/cloud/gha/profiles/framework.toml` 的 `ruff_paths`），UltraRAG 只读 pyproject 与 tests 目录。真正的 pytest 只能靠 runner。- `docs/subsystems/ci/GitHub-Actions-云门禁.md` §9 那张五仓表里 fw / dsh / ura 三行仍是上一轮的旧 head，本卡不在交付面内，没动它。"
+
+[entries."T-AG692"]
+id = "T-AG692"
+title = "GHA文档第9节三行读数换成E156那三趟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "1. 三个仓的新读数都是 2026-11-22 E156 落地后那一趟的现场值；快照 --force 推，旧 head 在远端已被覆盖，表下那句对照只能靠那三份作业日志复算，本卡没再推一趟去核对。见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节表下的对照段。2. dsh 那 39 条红是本机复现过的源仓欠账（本机 Tests 39 failed / 1158 passed），但套件计数两边不同（本机 59 / runner 131），这一项没查清，属源仓自己的事。读数取法见 scripts/cloud/gha/adapters/dsh.py。3. 本卡只动第 8.1 / 8.4 / 9 节：第 6 节那张逐门表没改，eng-gate 这一轮没有新读数，仍指 run 44930214907 那一趟。见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 6 节。"

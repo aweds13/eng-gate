@@ -1,0 +1,10 @@
+[entries."T-AG692"]
+id = "T-AG692"
+title = "GHA文档第9节三行读数换成E156那三趟"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "1. 三个仓的新读数都是 2026-11-22 E156 落地后那一趟的现场值；快照 --force 推，旧 head 在远端已被覆盖，表下那句对照只能靠那三份作业日志复算，本卡没再推一趟去核对。见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节表下的对照段。2. dsh 那 39 条红是本机复现过的源仓欠账（本机 Tests 39 failed / 1158 passed），但套件计数两边不同（本机 59 / runner 131），这一项没查清，属源仓自己的事。读数取法见 scripts/cloud/gha/adapters/dsh.py。3. 本卡只动第 8.1 / 8.4 / 9 节：第 6 节那张逐门表没改，eng-gate 这一轮没有新读数，仍指 run 44930214907 那一趟。见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 6 节。"
+
