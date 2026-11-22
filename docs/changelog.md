@@ -32,6 +32,10 @@
 - 上一趟 7ec400f0（4893.61 s / 1377 s）降级进 6.1 做对照，一条不删；3a5bc8cc 三连、ce93720e、97d009e5、190903a0、2026-11-19 两趟、1e815a96 全部保留。
 - 8.2 补 runner 侧对照：骨架改动前后两趟（7ec400f0 / a4b485e5）都是 23 门全绿，逐门秒求和的差是 runner 负载，不是判据变松 —— 门表与 scripts/run_gates.py 一条没动。
 - 第 9 节 eng-gate 行跟着换成 a4b485e5 / run 44969569738 / job 137046148410，另外四行不动（本轮没有新读数）。
+## 2026-11-22 T-AG694 GHA 文档第 9 节第 3 条：dsh 的 39 条红不是一条
+- 「唯一 FAIL 在 tests/store.spec.ts」是错的：那是适配器只打 25 行尾巴时唯一打印出来的那条，全量是 39 条（passed 1158 / numTotalTests 1197 / numFailedTestSuites 16）。
+- 补两张表：按文件 9 个文件合计 39；按成因 A 符号链接特权 7 / B 外部命令不在 PATH 16 / C 源仓文档债 3 / D NTFS chmod 1 / E 其它 12。取法与复算命令（corepack pnpm exec vitest run --reporter=json）写在同一条里。
+- 写明两边不是同一条读数：用例级 1197/1158/39 相同，套件级 16 vs 15，node v22.23.5 vs v24.19.0。处置按类分（A/B 换 Linux runner 大概率绿，C 是文档债，D 只能换 runner 或认平台，E 逐条看）。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

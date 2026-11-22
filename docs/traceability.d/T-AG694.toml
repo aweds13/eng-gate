@@ -1,0 +1,10 @@
+[entries."T-AG694"]
+id = "T-AG694"
+title = "GHA文档第9节第3条把dsh的39条红说成了一条"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+]
+gaps = "- 分类表来自**本机同树重跑**（node v24.19.0），不是 runner 上的分布：runner 的 numFailedTestSuites 是 16、本机 15，所以「某一类占几条」只在 runner 无关的粒度上成立。真源：docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节第 3 条已写明这条差异。- E 类 12 条只按首条 failureMessages 归类，没有逐条读完全部消息 —— 里面可能还有环境类（例如飞书消费者要外部进程）与真缺陷混在一起。要更细的分类得再跑一次 vitest 的 JSON，取法与命令见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节第 3 条。- 本卡只改文档，没碰 dsh 源仓与 dsh-gate 的适配器：39 条红仍在，处置留给源仓（换 Linux runner / 认平台）自己定。真源：scripts/cloud/gha/adapters/dsh.py 一行未改。"
+

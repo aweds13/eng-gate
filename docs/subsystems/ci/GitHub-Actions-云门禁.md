@@ -343,7 +343,7 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
 | `aweds13/eng-gate` | private | `engineering` | 23 道门（适配器把 `gates/last.json` 包成 BEGIN/END JSON） | `a4b485e5` / run `44969569738` / `Windows HKCU autostart E2E` `137046148410` | `ok=True` `n_gates=23` `not_run=[]`，逐门秒求和 2743.2 s（§6） |
 | `aweds13/om-gate` | **public** | `OpenMAIC` | 它自己 `ci.yml` 的 `unit` 四片 `vitest run --shard=N/4` | `92f3c6fe` / run `44753382083` / `Unit Tests (N/4)` × 4 | 用例 64 failed / 14727 passed / 448 skipped，四片相加 ≈ 717.7 s（§8.3） |
 | `aweds13/fw-gate` | private | `framework` | 那棵树自己的 `pytest`（适配器打 JSON） | `951faea6` / run `44959470353` / `137014874255` | `{"ok": true, "returncode": 0, "suite": "tests", "passed": 55, "failed": 0, "errors": 0, "skipped": 0, "red": []}`，作业 41 s |
-| `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run --reporter=json`（不分片） | `1f9fde2c` / run `44959511018` / `137015005171` | `{"ok": false, "suite": "vitest", "passed": 1158, "failed": 39, "skipped": 0, "files_failed": 16, "files_passed": 115}`（`numTotalTests 1197` / `numTotalTestSuites 131`），作业 279 s |
+| `aweds13/dsh-gate` | private | `dsh-superagent-prototype` | `pnpm install` + `vitest run --reporter=json`（不分片） | `1f9fde2c` / run `44959511018` / `137015005171` | `{"ok": false, "suite": "vitest", "passed": 1158, "failed": 39, "skipped": 0, "files_failed": 16, "files_passed": 115}`（`numTotalTests 1197` / `numTotalTestSuites 131`），作业 279 s；39 条红分 5 类见下面第 3 条 |
 | `aweds13/ura-gate` | private | `UltraRAG` | 那棵树自己的 `pytest` + `faiss-cpu` extra | `ba09e3f7` / run `44959573211` / `137015193514` | `{"ok": true, "returncode": 0, "extras": ["faiss-cpu"], "extras_rc": 0, "passed": 23, "failed": 0, "errors": 0, "red": []}`，作业 93 s |
 
 表里 `fw` / `dsh` / `ura` 三行的旧读数（`f31972d7` / `9bbc4a0a` / `dc6fcb9e`）是**一次性构建器**推的，
@@ -359,10 +359,47 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
    `gh api repos/<owner>/<repo>/actions/runs/<id> --jq .conclusion` 对这几仓永远是 `failure`。
 2. **两仓的 workflow 归自己**：`om-gate` 是 public、workflow 是它原树带的，8 份全 `active`，我们不关也不改；
    另外四仓的 workflow 是建仓时从模板带过来的，与源仓无关的那些已关。
-3. **`dsh-gate` 那条红是 Windows 的 chmod 语义，不是代码坏**：唯一 FAIL 在 `tests/store.spec.ts`（「目录只有属主可进、库只有属主可读」），
-   断言原文 `AssertionError: expected [ 438, 438 ] to deeply equal [ 448, 384 ]` —— 它比的是 `statSync(...).mode & 0o777`，
-   而 NTFS 上 `0o700` 目录 / `0o600` 文件会落成 `438`（`0o666` 家族）。要它绿只有两条路：换 Linux runner，或让那条判据认平台 ——
-   两条都超出「搬上去跑」这件事，留给源仓自己定。
+3. **`dsh-gate` 的 39 条红不是一个原因，也不是「只有一条 FAIL」**（旧口径写「唯一 FAIL 在 `tests/store.spec.ts`」是错的，卡 E159 改正）。
+   那一趟（job `137015005171`）的读数是 `passed 1158 / failed 39 / numTotalTests 1197 / numFailedTestSuites 16` ——
+   日志尾巴里唯一**打印出来**的确实是 `tests/store.spec.ts` 那条（「目录只有属主可进、库只有属主可读」，
+   原文 `AssertionError: expected [ 438, 438 ] to deeply equal [ 448, 384 ]`），但适配器只打 vitest 输出的**末 25 行**，另外 38 条被挤出了窗口。
+
+   全量清单不在日志里，在 vitest 的 JSON 报告里。在源树上重跑一次就复算得出来（vitest 4.1.8，72–77 s）：
+
+   ```
+   cd <源仓> && corepack pnpm exec vitest run --reporter=json --outputFile=vitest-local.json
+   ```
+
+   按**文件**（9 个文件，合计 39 条）：
+
+   | 文件 | 红条数 |
+   |---|---|
+   | `tests/service-script.spec.ts` | 15 |
+   | `tests/environment.spec.ts` | 6 |
+   | `tests/sources.spec.ts` | 6 |
+   | `tests/deployment.spec.ts` | 5 |
+   | `tests/docs.spec.ts` | 3 |
+   | `tests/commands.spec.ts` | 1 |
+   | `tests/prompts.spec.ts` | 1 |
+   | `tests/runtime.spec.ts` | 1 |
+   | `tests/store.spec.ts` | 1 |
+
+   按**成因**（同一份 JSON 的首条 `failureMessages` 归类，合计 39 条）：
+
+   | 类 | 条数 | 症状 |
+   |---|---|---|
+   | A 符号链接要特权 | 7 | `EPERM: operation not permitted, symlink ...` —— Windows 上建 symlink 要开发者模式或提权 |
+   | B 依赖外部命令不在 PATH | 16 | `code: 9009` / `spawn gh ENOENT` / `Error: STACK_TRACE_ERROR` —— 树里假定有 `gh` / `tmux` / `sh` |
+   | C 源仓文档表与 `src` / `tests` 不同步 | 3 | `expected [ ...(110) ] to deeply equal []` —— 文档债，与 runner 无关 |
+   | D NTFS chmod 语义 | 1 | `expected [ 438, 438 ] to deeply equal [ 448, 384 ]` —— 它比的是 `statSync(...).mode & 0o777`，NTFS 上 `0o700` / `0o600` 落成 `438`（`0o666` 家族） |
+   | E 其它（路径 / 格式 / 飞书消费者） | 12 | 提示词路径被拼成绝对路径、git 配置里的 `file:` 路径比对、`sources.spec.ts` 的飞书消费者状态机 |
+
+   ★ 这两张表是**本机同树重跑**的分类，不是 runner 日志的分类：用例级数字两边一致（1197 / 1158 / 39），
+   套件级不一致（`numFailedTestSuites` runner 上是 16，本机是 15），node 版本也不同（本机 `v24.19.0` vs runner `v22.23.5`）。
+   所以「哪一类占多少」按本机这份读，别把它当成 runner 上的分布。
+
+   处置**按类分**，不是一句「留给源仓自己定」：A / B 类换 Linux runner 大概率转绿（不需要 symlink 特权、`gh` / `tmux` / `sh` 都在）；
+   C 类是源仓自己的文档债，换什么 runner 都红；D 类只有换 runner 或让判据认平台两条路；E 类要逐条看（其中若干条看起来也不像环境问题）。
 
 ★ 读数的形状**在 E156 之后收拢了，剩一处**：`eng-gate` 是 BEGIN/END 包着的 JSON（23 道门），
 `fw-gate` / `ura-gate` / `dsh-gate` 是同一套外壳下的 JSON —— `fw-gate` / `ura-gate` 给 `passed` / `failed` / `red`，
