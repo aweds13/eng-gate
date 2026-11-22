@@ -7336,3 +7336,20 @@ depends = [
 ]
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E157"
+task = "T-AG692"
+title = "GHA文档第9节三行读数换成E156那三趟"
+tree = ".wt/E157"
+spec = "复盘/卡/卡E157-GHA文档第9节三行读数换成E156那三趟.md"
+files = [
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "docs/changelog.d/T-AG692.md",
+  "docs/traceability.d/T-AG692.toml"
+]
+depends = [
+  "E156"
+]
+risk = "low"
+status = "pending"
