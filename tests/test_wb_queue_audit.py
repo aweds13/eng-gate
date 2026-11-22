@@ -8,6 +8,14 @@ r"""队列登记审计（`tools/wb_queue_audit.py`，卡 216 · T-G329）的测�
 ★ 六条钉子（含反例）：① 孤儿号 ⇒ 红并点名（号 + 短 sha + 标题）；② 簿记号 ⇒ **不许**报错；
 ③ 一号多用 ⇒ 红；④ 干净仓 ⇒ 绿；⑤ 没有 git ⇒ 优雅跳过；⑥ 一批孤儿 ⇒ **全列出来**（证明它数得清）。
 另加：done 卡也照查（反向保护③）、CLI 两种输出 + 退出码。
+
+★ 卡 A394 补的三面（判词与实现对齐，别让老假红回来）：
+  · **台账也算登记**：号不在队列、但在 `docs/traceability.toml` 的 `[entries]` 里**且带
+    evidence** ⇒ 不是孤儿（老实现只读队列 ⇒ 真仓 217 条假红）；**没有 evidence 的条目不算**
+    （反例，判据不许放宽成「有条目就放行」）；分片 `docs/traceability.d/*.toml` 算同一本账。
+  · **簿记笔不算落地笔**：同一张卡的两笔里，有一笔整笔只改台账面 ⇒ 不报 `multi`
+    （老口径真仓 29 条假红）；两笔都改了代码 ⇒ 照报。
+  · **共用 task 号的卡要逐张查**：`queued` 原来是 dict，后卡覆盖前卡 ⇒ 静默漏检。
 ★ 只造**假仓 + 假队列**（`git init` + 临时 TOML），不起服务、不碰真仓库。
 """
 
@@ -175,6 +183,109 @@ def test_no_git_skips_gracefully(tmp_path: Path) -> None:
     assert result.skipped
     assert result.findings == ()
     assert not result.clean            # 跳过 ≠ 干净（不当通过）
+
+
+# ================================================ 卡 A394：台账 / 簿记笔 / 共用号
+#
+# 三面各配一条反例：判据放宽到「台账也算登记」不等于「都不用登记」；
+# 「簿记笔不算落地笔」不等于「几笔都不算」；共用 task 号的卡要**逐张**查。
+
+
+def _ledger(root: Path, entries: dict[str, str], *, shard: bool = False) -> None:
+    """写一份最小台账（`[entries."<号>"]` + evidence）。
+
+    `entries` 的值就是 evidence 那一项的原样文本（**空串 = 故意写一条没有证据的条目**）。
+    `shard=True` ⇒ 写进 `docs/traceability.d/x.toml`（分片形态）。
+    """
+    body = "".join(
+        f'[entries."{mark}"]\nid = "{mark}"\nstatus = "done"\n'
+        f'evidence = ["{ev}"]\n\n'
+        for mark, ev in entries.items())
+    target = (root / wb_queue_audit.LEDGER_SHARD_RELPATH / "x.toml" if shard
+              else root / wb_queue_audit.LEDGER_RELPATH)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+
+
+def test_mark_in_ledger_with_evidence_is_not_orphan(tmp_path: Path) -> None:
+    """③ 号不在队列、但在台账 `[entries]` 里且带 evidence ⇒ **不是孤儿**（卡 A394 主判据）。
+
+    反向：把 `audit` 的孤儿条件退回「只查队列」⇒ 这条红（真仓 217 条假红就是它）。
+    """
+    repo = _git_init(tmp_path)
+    _commit(repo, "T-G901", subject="feat: 落了也登记了")
+    _ledger(repo, {"T-G901": "file:tools/x.py"})
+    result = wb_queue_audit.audit(_backlog(_mk_card("007", task="T-G888")), repo=repo)
+    assert result.orphans == (), result.orphans
+    assert result.ledger == 1, result.ledger
+
+
+def test_ledger_entry_without_evidence_is_still_orphan(tmp_path: Path) -> None:
+    """③ 反例：台账有条目但 **evidence 空**（或空串）⇒ 仍算孤儿。
+
+    判据只放宽到「台账也算登记」，没有放宽成「有条目就放行」。
+    """
+    repo = _git_init(tmp_path)
+    _commit(repo, "T-G902", subject="feat: 只有一行标题，没有证据")
+    (repo / wb_queue_audit.LEDGER_RELPATH).parent.mkdir(parents=True, exist_ok=True)
+    (repo / wb_queue_audit.LEDGER_RELPATH).write_text(
+        '[entries."T-G902"]' + chr(10) + 'id = "T-G902"' + chr(10)
+        + 'status = "done"' + chr(10) + 'evidence = []' + chr(10)
+        + chr(10) + '[entries."T-G903"]' + chr(10) + 'id = "T-G903"' + chr(10)
+        + 'evidence = ["  "]' + chr(10), encoding="utf-8")
+    result = wb_queue_audit.audit(_backlog(_mk_card("007", task="T-G888")), repo=repo)
+    assert [f.mark for f in result.orphans] == ["T-G902"], result.orphans
+    assert result.ledger == 0, result.ledger
+
+
+def test_ledger_shard_entry_counts_as_ledger(tmp_path: Path) -> None:
+    """③ 只写在 `docs/traceability.d/x.toml` 分片里的条目也算台账（刚落、还没汇总的那一批）。"""
+    repo = _git_init(tmp_path)
+    _commit(repo, "T-G904", subject="feat: 分片登记")
+    _ledger(repo, {"T-G904": "file:tools/y.py"}, shard=True)
+    result = wb_queue_audit.audit(_backlog(_mk_card("007", task="T-G888")), repo=repo)
+    assert result.orphans == (), result.orphans
+    assert result.ledger == 1, result.ledger
+
+
+def test_bookkeeping_commit_is_not_counted_as_landing(tmp_path: Path) -> None:
+    """④ 同一张卡两笔，其中一笔**整笔只改台账面** ⇒ 不报 multi（卡 A394；老口径真仓 29 条假红）。"""
+    repo = _git_init(tmp_path)
+    _commit(repo, "T-G810", subject="docs(changelog): 补一条台账面",
+            path="docs/changelog.d/T-G810.md")
+    _commit(repo, "T-G810", subject="feat: 真落地", path="tools/real.py")
+    result = wb_queue_audit.audit(_backlog(_mk_card("007", task="T-G810")), repo=repo)
+    assert result.multi == (), result.multi
+
+
+def test_two_landing_commits_are_reported_as_multi(tmp_path: Path) -> None:
+    """④ 反例：两笔**都改了台账面以外**的文件 ⇒ 照报 multi，且两笔都列出来。"""
+    repo = _git_init(tmp_path)
+    _commit(repo, "T-G811", path="tools/a.py")
+    _commit(repo, "T-G811", path="tools/b.py")
+    result = wb_queue_audit.audit(_backlog(_mk_card("007", task="T-G811")), repo=repo)
+    assert len(result.multi) == 1, result.multi
+    assert len(result.multi[0].commits) == 2, result.multi[0].commits
+
+
+def test_shared_task_cards_are_all_checked(tmp_path: Path) -> None:
+    """⑤ 两张**不同 id** 的卡共用同一个 task 号 ⇒ **每张各报一条** multi。
+
+    反向：把 `queued` 退回 dict（`{card.task: card}`）⇒ 后卡覆盖前卡，这里只会剩一条。
+    """
+    repo = _git_init(tmp_path)
+    _commit(repo, "T-G812", path="tools/a.py")
+    _commit(repo, "T-G812", path="tools/b.py")
+    result = wb_queue_audit.audit(
+        _backlog(_mk_card("125", task="T-G812"), _mk_card("126", task="T-G812")), repo=repo)
+    assert sorted(f.card for f in result.multi) == ["125", "126"], result.multi
+
+
+def test_ledger_read_is_graceful_when_missing(tmp_path: Path) -> None:
+    """② 没有 `docs/traceability.toml` ⇒ `ledger_marks` 返回空集、不抛（卡树 / 沙箱 / 新仓）。"""
+    repo = tmp_path / "noledger"
+    repo.mkdir()
+    assert wb_queue_audit.ledger_marks(repo) == set()
 
 
 # ------------------------------------------------ CLI：两种输出 + 退出码

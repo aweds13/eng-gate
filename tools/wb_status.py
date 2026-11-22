@@ -42,8 +42,14 @@ r"""WorkBuddy / CodeBuddy CLI 状态器：把 stream-json 事件读成人看的�
     **awaiting-commit**（围栏读不到目录就当没有 —— 卡树里没有 `gates/`，优雅降级）；
   · 其余 ⇒ **pending**。
 `--json` 的 summary 同时给出 `done` 数与 `tasks_in_git`（git 里出现过的 Task 号数），
-两者之差由 `orphan_tasks`（台账无条目、非簿记号的号）点名 —— 判据「done 数 == 提交里
-出现过的 task 数」的核对材料就在这一份输出里（白名单理由归迁移文档，不进本工具）。
+两者之差由 `orphan_tasks`（**两本账都没有条目**、且非簿记号的号）点名 —— 判据「done 数 ==
+提交里出现过的 task 数」的核对材料就在这一份输出里（白名单理由归迁移文档，不进本工具）。
+
+★ 卡 A394：「台账」是**两本账**（队列 `docs/workbacklog.toml` ∪ 台账 `docs/traceability.toml`
+的 `[entries]`，含 `docs/traceability.d` 分片，且**必须有 evidence 指针**才算登记）。
+判词原本写「台账无条目」而实现只读了队列 ⇒ 2026-11-22 实测 217 条假红全在 traceability 里、
+status 全 done、evidence 全非空。口径只有一份，在 `wb_queue_audit` 的模块 docstring
+§口径（二）；本文件只复用 `ledger_marks`，不写第二份。
 """
 
 from __future__ import annotations
@@ -65,7 +71,7 @@ from pool.jobs import (
 )
 from pool.jobs import clip as _clip
 from pool.jobs import tool_line as _tool_line
-from wb_queue_audit import queue_touch_marks, read_task_commits
+from wb_queue_audit import ledger_marks, queue_touch_marks, read_task_commits
 
 #: 逻辑层在 `pool.jobs`；这里原样转发 `parse_events`（wb_dash 用）与 `_clip` / `_tool_line`
 #: （wb_dispatch 用）。`read_log_lines` / `UnknownLogEncodingError` 也转发一份：卡 E75 起
@@ -153,10 +159,18 @@ def derive_status(root: Path) -> tuple[list[dict], dict[str, object]]:
 
 
 def orphan_tasks(root: Path, rows: list[dict], marks: dict[str, object]) -> list[str]:
-    """git 里挂了 `Task:` 、台账却没有该任务的号（簿记号除外 —— 口径见 wb_queue_audit）。"""
+    """git 里挂了 `Task:` 、**两本账都没有该条目**的号（卡 A394）。
+
+    两本账 = 队列（`docs/workbacklog.toml` 的卡）∪ 台账（`docs/traceability.toml` 的
+    `[entries]`，含分片，且必须有 evidence 指针才算登记）—— 口径只有一份，在
+    `wb_queue_audit` 的模块 docstring §口径（二）/（一）里，这里不另写。簿记号、台账条目
+    都不算孤儿。
+    """
     queued = {r["task"] for r in rows if r["task"]}
     protected = queue_touch_marks(root, marks)
-    return sorted(m for m in marks if m not in queued and m not in protected)
+    registered = ledger_marks(root)
+    return sorted(m for m in marks
+                  if m not in queued and m not in protected and m not in registered)
 
 
 def derived_summary(rows: list[dict], marks: dict[str, object],
@@ -222,7 +236,7 @@ def _derived_main(args: argparse.Namespace) -> int:
     print(f"[派生] 卡 {summary['cards']} 张：done {summary['done']} / "
           f"awaiting-commit {summary['awaiting-commit']} / pending {summary['pending']}"
           f"（git 里 Task 号 {summary['tasks_in_git']} 个，"
-          f"台账无条目 {summary['orphan_tasks']} 个）")
+          f"两本账都没有 {summary['orphan_tasks']} 个）")
     for r in rows:
         via = f"  ← {r['via']}" if r["via"] else ""
         print(f"  · {r['id']}（{r['task']}）{r['status']}{via}")

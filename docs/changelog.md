@@ -36,6 +36,11 @@
 - 「唯一 FAIL 在 tests/store.spec.ts」是错的：那是适配器只打 25 行尾巴时唯一打印出来的那条，全量是 39 条（passed 1158 / numTotalTests 1197 / numFailedTestSuites 16）。
 - 补两张表：按文件 9 个文件合计 39；按成因 A 符号链接特权 7 / B 外部命令不在 PATH 16 / C 源仓文档债 3 / D NTFS chmod 1 / E 其它 12。取法与复算命令（corepack pnpm exec vitest run --reporter=json）写在同一条里。
 - 写明两边不是同一条读数：用例级 1197/1158/39 相同，套件级 16 vs 15，node v22.23.5 vs v24.19.0。处置按类分（A/B 换 Linux runner 大概率绿，C 是文档债，D 只能换 runner 或认平台，E 逐条看）。
+## 2026-11-22 T-AG695 孤儿号判据把台账读全：台账是两本账，一卡一号只数落地笔
+- 孤儿号口径放宽到「队列 ∪ 台账」：`docs/traceability.toml` 的 `[entries]`（含 `docs/traceability.d` 分片，且必须有 evidence）也算登记；真仓 217 条红 ⇒ 0，两本账都没有的仍是 0 条。
+- 一卡一号只数落地笔：整笔只改台账面（docs/ 复盘/ skills/ 与 gates/last.json）的簿记笔不计；真仓 29 张 ⇒ 3 张真·两笔落地（A289 / E49 / E54）。
+- 判词与实现对齐：`tools/wb_reconcile.py` 红行/绿行与 `tools/wb_status.py` 汇总行改成「队列与台账都没有」，退出码 0/1/2 不变。
+- 口径三节写进 `tools/wb_queue_audit.py` 模块 docstring（簿记号 / 台账 / 只数落地笔），附 2026-11-22 实测依据 —— 卡 216 规格要求「口径自己定但必须写进 docstring 并给依据」。
 ## 2026-11-21 T-AG680 E146 GHA 云门禁第二仓：构建器按仓取 profile，骨架 + 每仓一份
 - 新增 scripts/cloud/gha/gate_profile.py（10 段 schema、11 条交叉校验、shell_split 走 shlex）与 profiles/engineering.toml + profiles/openmaic.toml；build_snapshot.py 吃 --repo，engineering 行为由 profile 逐条还原。
 - 新增两根骨头：snapshot.require_text（静态读盘查字样，装错树几秒内退 5）与 workflow.install（往快照写 workflow，dst 不许逃出快照）；修掉 --stage all 被 MISSING_DEST 挡掉的真 bug。

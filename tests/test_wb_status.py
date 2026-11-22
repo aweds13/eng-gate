@@ -307,6 +307,23 @@ def test_reconcile_red_on_orphan_task_commit(tmp_path: Path, capsys) -> None:
     assert wb_reconcile.main(["--root", str(root)]) == 0
 
 
+def test_reconcile_green_when_ledger_has_entry(tmp_path: Path, capsys) -> None:
+    """钉子②′（卡 A394）：号**不在队列**、但在台账 `[entries]` 里带 evidence ⇒ 不红、退 0。
+
+    判词一直是「台账缺条目」，可实现只读了队列 —— 真仓实测 217 条假红全在
+    `docs/traceability.toml` 里（status 全 done、evidence 全非空）。口径只有一份，在
+    `wb_queue_audit` 的模块 docstring §口径（二）。
+    """
+    root = _derive_repo(tmp_path)
+    _ledger(root, ("A1", "T-Z1"))                       # 队列（docs/workbacklog.toml）
+    _commit(root, "feat: 落了也在台账登记过", task="T-Z9")
+    (root / "docs" / "traceability.toml").write_text(
+        '[entries."T-Z9"]' + chr(10) + 'id = "T-Z9"' + chr(10) + 'status = "done"' + chr(10)
+        + 'evidence = ["file:tools/x.py"]' + chr(10), encoding="utf-8")
+    assert wb_reconcile.main(["--root", str(root)]) == 0
+    assert "没有孤儿号" in capsys.readouterr().out
+
+
 def test_reconcile_is_fine_when_no_task_mark_yet(tmp_path: Path) -> None:
     """A318：**没 git** 才退 2；有 git 但一笔 `Task:` 都没有是新仓初始态 ⇒ 退 0。"""
     _git(tmp_path, "init", "-q")

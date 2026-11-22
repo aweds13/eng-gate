@@ -8,11 +8,17 @@ stale-done（黄）/ 认账」。卡 A318 起**账本只存计划、状态由 gi
   ① 派生视图：每张卡的状态 = `wb_status.derive_status`（有 `Task:` trailer 的提交
      ⇒ done；批次围栏 landed ⇒ done / awaiting-commit ⇒ awaiting-commit；
      其余 pending）—— 口径只有 wb_status 那一份，这里不另写。
-  ② **孤儿号（红）**：git 里挂了 `Task: <号>` 的提交，台账却没有该任务的条目
+  ② **孤儿号（红）**：git 里挂了 `Task: <号>` 的提交，**队列与台账都没有该条目**
      ⇒ 红、退 1。这正是 A315/A316 事故形状（提交挂了 `Task:`、台账没记）；落地侧
      由 `wb_land.py` 的台账守卫拒落，这里负责**事后**还能被看见。
-     簿记号（改过队列文件的登记/收尾号）不算孤儿 —— 口径与保护同
-     `tools/wb_queue_audit.py`（trailer 解析与簿记号判定都复用它，不写第二份）。
+
+★ 卡 A394：判词一直写「台账没有该任务」，可实现只读了队列（`docs/workbacklog.toml`）。
+  「台账」是**两本账** —— 队列 ∪ `docs/traceability.toml` 的 `[entries]`（含
+  `docs/traceability.d` 分片，且**必须有 evidence 指针**才算登记）。2026-11-22 实测：
+  按老口径 217 条红，逐条核对后 217/217 都在 traceability 里、status 全 done、
+  evidence 全非空，两本账都没有的是 0 条。口径只有一份，写在 `tools/wb_queue_audit.py`
+  的模块 docstring §口径（二），本文件只复用 `ledger_marks`（trailer 解析、簿记号判定、
+  台账条目判定全复用，不写第二份）。
 
 退出码：0 = 无孤儿号；1 = 有孤儿号（点名）；2 = 读不了台账 / 没有 git（跳过，
 不当通过也不当红）。
@@ -58,7 +64,8 @@ def check(root: Path) -> tuple[list[dict], list[str], dict]:
     """派生对账（只读）。返回 `(rows, orphans, marks)`：
 
     · `rows`：`wb_status.derive_status` 的每卡派生状态；
-    · `orphans`：git 有 `Task:` 、台账无条目、且不是簿记号的号（红判据②）；
+    · `orphans`：git 有 `Task:` 、队列与台账都无条目、且不是簿记号的号（红判据②）；
+      两本账的口径见 `wb_queue_audit` 模块 docstring §口径（二）（卡 A394）；
     · `marks`：git 里全部 Task 号表（空 dict ⇒ 没有 git / 空仓，调用方退 2）。
     """
     rows, marks = wb_status.derive_status(root)
@@ -96,10 +103,11 @@ def main(argv: list[str] | None = None) -> int:
               f"pending {summary['pending']}（git 里 Task 号 "
               f"{summary['tasks_in_git']} 个）")
         for mark in orphans:
-            print(f"[红] 提交挂了 Task: {mark} 但台账没有该任务"
+            print(f"[红] 提交挂了 Task: {mark} 但队列（docs/workbacklog.toml）与台账"
+                  "（docs/traceability.toml）都没有该条目"
                   " ⇒ 台账缺条目（A315/A316 事故形状；补登记或定性）")
         if not orphans:
-            print("[OK ] 没有孤儿号（git 里的 Task 号都能在台账找到条目或为簿记号）")
+            print("[OK ] 没有孤儿号（git 里的 Task 号都能在队列或台账找到条目，或为簿记号）")
     return 1 if orphans else 0
 
 

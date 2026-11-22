@@ -13181,3 +13181,25 @@ evidence = [
   "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
 ]
 gaps = "- 分类表来自**本机同树重跑**（node v24.19.0），不是 runner 上的分布：runner 的 numFailedTestSuites 是 16、本机 15，所以「某一类占几条」只在 runner 无关的粒度上成立。真源：docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节第 3 条已写明这条差异。- E 类 12 条只按首条 failureMessages 归类，没有逐条读完全部消息 —— 里面可能还有环境类（例如飞书消费者要外部进程）与真缺陷混在一起。要更细的分类得再跑一次 vitest 的 JSON，取法与命令见 docs/subsystems/ci/GitHub-Actions-云门禁.md 第 9 节第 3 条。- 本卡只改文档，没碰 dsh 源仓与 dsh-gate 的适配器：39 条红仍在，处置留给源仓（换 Linux runner / 认平台）自己定。真源：scripts/cloud/gha/adapters/dsh.py 一行未改。"
+
+[entries."T-AG695"]
+id = "T-AG695"
+title = "孤儿号判据把台账读全：台账是两本账 + 一卡一号只数落地笔"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/wb_queue_audit.py",
+  "file:tools/wb_status.py",
+  "file:tools/wb_reconcile.py",
+  "file:tests/test_wb_queue_audit.py",
+  "file:tests/test_wb_reconcile.py",
+  "file:tests/test_wb_status.py",
+  "test:test_wb_queue_audit.py::test_mark_in_ledger_with_evidence_is_not_orphan",
+  "test:test_wb_queue_audit.py::test_ledger_entry_without_evidence_is_still_orphan",
+  "test:test_wb_queue_audit.py::test_bookkeeping_commit_is_not_counted_as_landing",
+  "test:test_wb_queue_audit.py::test_two_landing_commits_are_reported_as_multi",
+  "test:test_wb_queue_audit.py::test_shared_task_cards_are_all_checked",
+  "test:test_wb_reconcile.py::test_orphan_cleared_by_ledger_entry",
+  "test:test_wb_status.py::test_reconcile_green_when_ledger_has_entry",
+]
+gaps = "- `queued` 从 dict 改成 set 没修掉任何 bug：两种写法的键集合完全相同（task 号作键），判孤儿的行为改前改后一致；改 set 只为不让后来人以为 `queued[mark]` 能取到那张卡。指针 `tools/wb_queue_audit.py`。- 「必须带 evidence 才算登记」今天没挡下任何真孤儿：evidence 为空的只有 SR-F2.8 与 SR-F8.4b，两个号都不在 git 的 618 个 Task 号里 ⇒ 这条今天是防线不是修正。指针 `docs/traceability.toml`。- 3 张真·一卡两号（A289/T-AG403、E49/T-AG499、E54/T-AG505）没有定性，本卡只保证它们还红着；要不要拆卡得单独开卡并问用户。指针 `docs/workbacklog.toml`。- `LANDING_EXEMPT_DIRS`（docs/ 复盘/ skills/ + gates/last.json）是照 29 条实读定的经验值：将来「只改 src/ 一行、整笔无代码语义」的簿记笔会被算成落地笔（宁可多报，不静默豁免）。指针 `tools/wb_queue_audit.py`。- 这条判据不是门禁：`scripts/` 与 `gates/defs/` 对 `wb_queue_audit` 零命中，唯一咬它的是 tests 里那三份 ⇒ 「门禁全绿」不等于「这条判据读全了」。指针 `tests/test_wb_queue_audit.py`。"

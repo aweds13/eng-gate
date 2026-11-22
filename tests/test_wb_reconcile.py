@@ -11,6 +11,7 @@ A318 之前，对账是「拿台账里的 `status` 字段跟 git 比」，于是
 | ① 提交 trailer ⇒ done | 有 `Task:` 的提交就是已落地 | 派生漏读 trailer |
 | ② 没提交 ⇒ pending | 不许拿"登记了"冒充"落了" | 把 pending 当 done |
 | ③ 孤儿号 ⇒ 红 | git 有 `Task:`、台账没条目 | 吞掉孤儿（A315/A316 事故形状） |
+| ③′ 台账有条目 ⇒ 不红 | 号在台账 `[entries]` 里且带 evidence | 只读队列（A394：217 条假红） |
 | ④ 正文提到不算 | 只认标题里的 trailer | 正则扫了整条 commit message |
 | ⑤ 围栏 landed ⇒ done | 批收口也是证据 | 只认提交、不认围栏 |
 | ⑥ 围栏 draft ⇒ pending | 未落地的批不算证据 | 拿 draft 当 landed |
@@ -91,6 +92,24 @@ def test_orphan_task_is_red(tmp_path: Path) -> None:
     rows, orphans, _marks = wb_reconcile.check(root)
     assert "T-GX9" in orphans, orphans
     assert wb_reconcile.main(["--root", str(root)]) == 1
+
+
+def test_orphan_cleared_by_ledger_entry(tmp_path: Path) -> None:
+    """③′ 号**不在队列**、但在台账 `[entries]` 里且带 evidence ⇒ 不是孤儿、退 0。
+
+    ★ 卡 A394：判词一直写「台账没有该任务」，可实现只读了队列 `docs/workbacklog.toml`。
+    口径是**两本账**（队列 ∪ `docs/traceability.toml` 的 `[entries]`，必须有 evidence、
+    含 `docs/traceability.d` 分片），唯一真源在 `tools/wb_queue_audit.py` 的 docstring。
+    反向：把 `wb_status.orphan_tasks` 里的 `ledger_marks` 去掉 ⇒ 这条红（真仓 217 条假红）。
+    """
+    root = _repo(tmp_path, _card("A5", "T-GX5"))
+    _git(root, "commit", "-q", "--allow-empty", "-m", "feat: z", "-m", "Task: T-GX9")
+    (root / "docs" / "traceability.toml").write_text(
+        f'[entries."T-GX9"]{NL}id = "T-GX9"{NL}status = "done"{NL}'
+        f'evidence = ["file:tools/x.py"]{NL}', encoding="utf-8")
+    rows, orphans, _marks = wb_reconcile.check(root)
+    assert orphans == [], orphans
+    assert wb_reconcile.main(["--root", str(root)]) == 0
 
 
 def test_body_mention_is_not_a_commit(tmp_path: Path) -> None:
