@@ -7389,3 +7389,22 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "A394"
+task = "T-AG695"
+title = "孤儿号判据把台账读全：台账是两本账 + 一卡一号只数落地笔"
+tree = ".wt/A394"
+spec = "复盘/卡/卡A394-两本账与一卡一号-把台账读全.md"
+files = [
+  "tools/wb_queue_audit.py",
+  "tools/wb_status.py",
+  "tools/wb_reconcile.py",
+  "tests/test_wb_queue_audit.py",
+  "tests/test_wb_reconcile.py",
+  "tests/test_wb_status.py",
+  "复盘/卡/卡A394-两本账与一卡一号-把台账读全.md"
+]
+depends = []
+risk = "mid"
+status = "pending"
