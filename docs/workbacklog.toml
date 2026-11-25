@@ -7408,3 +7408,25 @@ files = [
 depends = []
 risk = "mid"
 status = "done"
+
+[[cards]]
+id = "E160"
+task = "T-AG696"
+title = "云门禁三页文档与现实对齐（云机已换机/门数22→23/导航缺subsystems入口）"
+tree = ".wt/E160"
+spec = "复盘/卡/卡E160-云门禁文档与现实对齐.md"
+files = [
+  "docs/subsystems/ci/云门禁机.md",
+  "docs/subsystems/ci/测试流程.md",
+  "docs/subsystems/ci/门禁自证-product.md",
+  "docs/文档系统导航.md",
+  "AGENTS.md",
+  ".gitignore",
+  "docs/changelog.d/T-AG696.md",
+  "docs/traceability.d/T-AG696.toml"
+]
+depends = [
+  "E159"
+]
+risk = "low"
+status = "pending"
