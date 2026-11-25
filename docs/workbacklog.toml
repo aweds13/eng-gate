@@ -7478,3 +7478,181 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "165"
+task = "T-G265"
+title = "落档：坑总账（344 条）+ 不变量台账（77 条）"
+tree = ""
+spec = "复盘/卡/卡165-落档坑总账与台账.md"
+files = [
+  "复盘/卡/卡165-落档坑总账与台账.md"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "193"
+task = "T-G293"
+title = "**压缩文书判据接线**：`card_doc_budget` 接进收口链"
+tree = ".wt/docbudget"
+spec = "复盘/卡/卡193-文书预算接线.md"
+files = [
+  "tests/test_card_doc_budget.py",
+  "tests/test_wb_land.py",
+  "tools/pool/stage_card.py",
+  "复盘/卡/卡193-文书预算接线.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "194"
+task = "T-G294"
+title = "**CodeBuddy 工人的白名单路径要指向卡树**（不是主仓）"
+tree = ".wt/promptpath"
+spec = "复盘/卡/卡194-工人路径指向卡树.md"
+files = [
+  "tests/test_wb_dispatch.py",
+  "tools/wb_dispatch.py",
+  "复盘/卡/卡194-工人路径指向卡树.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "195"
+task = "T-G295"
+title = "**码道派活要进租约登记**（跨池冲突才看得见）"
+tree = ".wt/lease"
+spec = "复盘/卡/卡195-码道进租约登记.md"
+files = [
+  "tests/test_pool_lease.py",
+  "tools/pool/lease.py",
+  "复盘/卡/卡195-码道进租约登记.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A299"
+task = "T-AG413"
+title = "接手旧项目的能力：方案咨询"
+tree = ""
+spec = "复盘/卡/卡A299-接手能力方案咨询.md"
+files = [
+  "复盘/卡/卡A299-接手能力方案咨询.md"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "A352"
+task = "T-AG565"
+title = "谁先干这趟活：七种内置路由策略"
+tree = ".wt/A352"
+spec = "复盘/卡/卡A352-谁先干这趟活.md"
+files = [
+  "tests/test_pool_route_strategies.py",
+  "tools/pool/route.py",
+  "复盘/卡/卡A352-谁先干这趟活.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A355"
+task = "T-AG568"
+title = "按请求算结局，不按轮"
+tree = ".wt/A355"
+spec = "复盘/卡/卡A355-按请求算结局.md"
+files = [
+  "tests/test_pool_outcomes.py",
+  "tools/pool/outcomes.py",
+  "tools/wb_dispatch.py",
+  "复盘/卡/卡A355-按请求算结局.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A357"
+task = "T-AG570"
+title = "清空用量：只加一条「到此为止不算」的标记，账一行不动"
+tree = ".wt/A357"
+spec = "复盘/卡/卡A357-清空用量.md"
+files = [
+  "tests/test_pool_cleared.py",
+  "tools/pool/cleared.py",
+  "tools/pool/ledger_spend.py",
+  "复盘/卡/卡A357-清空用量.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A358"
+task = "T-AG571"
+title = "一行说完「现在能不能派」，多一个字都是噪音"
+tree = ".wt/A358"
+spec = "复盘/卡/卡A358-一行说完能不能派.md"
+files = [
+  "tests/test_pool_quota_line.py",
+  "tools/pool/quota_line.py",
+  "tools/pool_quota.py",
+  "复盘/卡/卡A358-一行说完能不能派.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "A360"
+task = "T-AG572"
+title = "什么情况不许报速度"
+tree = ".wt/A360"
+spec = "复盘/卡/卡A360-什么情况不许报速度.md"
+files = [
+  "tests/test_pool_speed_tells.py",
+  "tools/pool/speed.py",
+  "复盘/卡/卡A360-什么情况不许报速度.md"
+]
+depends = []
+risk = "mid"
+status = "done"
+
+[[cards]]
+id = "E30"
+task = "T-AG484"
+title = "并行度自适应与分片策略：把 4 个 worker 的硬顶拆成按内存分档"
+tree = ".wt/E30"
+spec = "复盘/卡/卡E30-并行度自适应与分片策略.md"
+files = [
+  "复盘/卡/卡E30-并行度自适应与分片策略.md"
+]
+depends = []
+risk = "low"
+status = "done"
+
+[[cards]]
+id = "F11"
+task = "T-AG559"
+title = "pool 项目书自己就是过期的：手写的体量表 21 个模块一个都没提"
+tree = ".wt/F11"
+spec = "复盘/卡/卡F11-pool项目书自己就是过期的.md"
+files = [
+  "scripts/gen_pool_readme.py",
+  "tests/test_pool_readme_counts.py",
+  "复盘/卡/卡F11-pool项目书自己就是过期的.md"
+]
+depends = []
+risk = "mid"
+status = "done"
