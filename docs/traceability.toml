@@ -13230,3 +13230,18 @@ evidence = [
   "test:test_ci_portability.py::test_doc_rows_are_all_machine_checkable",
 ]
 gaps = "1. 「云门禁-可复现性清单.md 的 §2 主表 R1–R18 常设有效」是设计判断，没有测试钉住这句话本身 —— 钉住的只是表结构（R 连号 / 6 列 / 判据节点可解析）。读者若把「常设有效」误读成「现在跑得通」，页首注已明写机器不存在、退 2。指针 docs/subsystems/ci/云门禁-可复现性清单.md2. 本卡只改了两页「会被当现状用」的口气；复盘/ 与 docs/changelog 里大量历史记录仍写「云机」（台账、复盘卡、changelog 条目），按 doc-write 问题 2 属于「当时的决定」⇒ 保留不改，不在本卡范围。指针 docs/subsystems/ci/测试流程.md3. 卡 E160 的 checkpoint 里有一句「测试流程.md §8 边界八条的『云机慢不等于不能用』未改」——本卡把它改了（补了一句「2026-11-25 起那台机器已不存在」）。这是有意覆盖前卡留下的缺口，不是推翻前卡的结论。指针 docs/subsystems/ci/测试流程.md"
+
+[entries."T-AG698"]
+id = "T-AG698"
+title = "文档治理收尾：云机口径残留 + 九份 NOTES 重复段"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "file:skills/README.md",
+  "file:skills/pipe-gate/NOTES.md",
+  "file:skills/pipe-new/NOTES.md",
+  "file:skills/softeng-manage/NOTES.md",
+]
+gaps = "1. 九份 NOTES 压短后，读者若想追问「当初为什么这么分」，只能回 skills/README.md §2 读一次 —— 那是有意的单点，但也意味着 §2 若被改坏，九份副本不会自证。指针 skills/README.md2. `[workflow].install` 本卡只把文档口径改成「代码已接线、五份 profile 都没填」，并没有真填一份去跑 —— 这条键仍是「没在真跑里用过」。指针 scripts/cloud/gha/build_snapshot.py3. 本卡没碰 `云门禁-可复现性清单.md`（E161 刚改），也没动 `测试流程.md` 的 23 行门表与耗时来源；门数/耗时那两处仍是 2026-10-25 的历史读数，将来真要更新是另一张卡的事。指针 docs/subsystems/ci/测试流程.md"

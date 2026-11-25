@@ -163,7 +163,7 @@ ok=True  host=runnervmbpeip  rev=a4b485e5  branch=main  n_gates=23  not_run=[]  
 py=3.12.10  workers=4
 ```
 
-逐门耗时（秒）。源：同一份读数的 `gates[].seconds`，22 门 `exit_code=0`、`render` 为 `EXCLUDED`：
+逐门耗时（秒）。源：同一份读数的 `gates[].seconds`；23 道门里 22 道 `exit_code=0`，`render` 记 `EXCLUDED`（不算红）：
 
 | 门 | 秒 | 门 | 秒 |
 |---|---|---|---|
@@ -325,9 +325,14 @@ runner 只在外面跑 —— 与 §0 那条原则一致。
 
 1. **仍然改不了 workflow**：本机的 token 没有 workflow scope（§2、§7.1）。om-gate 的 `ci.yml` 不是我们改的，
    它原本就在那棵树里、原本就按 `--shard=N/4` 跑。要换触发条件 / 换 `runs-on`，同样得有 workflow scope。
-2. **`[workflow].install` 这条键今天仍然没有使用者**：它是给「仓自己的 workflow 不认我们这套 BEGIN/END 读数、
-   但仓又能自己写 workflow」的那种仓准备的。E156 之后五个仓都走 `snapshot.from_remote_workflows = true`
-   （镜像仓上冻结的就是模板带过来的那份），所以这条键**连一个消费者都没有**。键留着，但没跑过就别说它行。
+2. **`[workflow].install` 代码已接线，但五份 profile 都没填**：它是给「仓自己的 workflow 不认我们这套
+   BEGIN/END 读数、但仓又能自己写 workflow」的那种仓准备的 —— build 段会调 `_install_workflows()`：缺 `src`
+   打 `MISSING_WORKFLOW_SRC` 退 2，装成打 `workflow installed: <dst> <- <src>`；`gate_profile.py` 会拒 `dst`
+   逃出快照、也拒它与 `from_remote_workflows = true` 同时出现，三条测试钉着这三件事（
+   `tests/test_gha_cloud_gate.py` 的 `test_workflow_install_missing_src_fails_fast_with_config_code` /
+   `test_workflow_install_writes_into_the_snapshot` / `test_profile_rejects_workflow_dst_escaping_the_snapshot`）。
+   现状是五个仓的 `[workflow].install` **全空**（`openmaic` 是唯一 `from_remote_workflows = false` 的，也没填）
+   ⇒ 这条键到今天**没在真跑里用过**。键留着，没跑过就别说它行。
 3. **读数的形状已经收拢，只剩一处不统一**：engineering 与 E156 收进来的三仓（`framework` / `dsh` / `ultrarag`）
    都是适配器把结果写成 JSON、再包在 `=== GHA-GATE-READING-BEGIN/END ===` 里打出来（engineering 那份是 23 道门，
    三仓是 `passed` / `failed` / `red` 那几个字段）。不统一的只剩 `om-gate`：它 `adapter.enabled = false`（§8.1 那张表），

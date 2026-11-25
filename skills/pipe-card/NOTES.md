@@ -15,25 +15,14 @@
 - 另一类（2026-10-15 实测）：**把长跑派给工人**，工人 harness 不支持后台命令，于是在卡里空转，
   日志里只剩同一条被拒的命令。所以派活前要问「这张卡是秒级能跑完的吗」。
 
-## ★ 为什么分「SKILL.md / references/repo-bindings.md」两页
+## ★ 两页怎么分（2026-11-08 泛用化）
 
-2026-11-08（用户提出）：「你顺便把软工的那些技能的泛用性提升一下，现在它们只针对 engineer 这个仓库，
-是不够的」；「建议是特定仓库表述下降到原来更下一层的 reference，基于 agent 文档和 skills 编写的最佳规范」。
+搬走的是**本仓形状**：台账文件名 / 目录 / 卡号 / `T-AG…` 样例 / 模型清单 / 看守产物路径 —— 全在
+[`references/repo-bindings.md`](references/repo-bindings.md)；`SKILL.md` 只留卡的四件套、开卡与派活的顺序、
+读结果的方法。换仓只换 references 一份。
 
-按 `docs/reference/agent-skills-spec.md` 的口径落成两页：
-
-- **`SKILL.md`** 只留**换仓不变的东西**：卡的四件套（规格 / 队列条目 / 树提交 / 申报）、开卡与派活的顺序、
-  读结果的方法、常见误读。里面不再出现本仓的台账文件名 / 目录 / 卡号 / `T-AG…` 样例 / 模型清单 / 看守产物路径。
-- **`references/repo-bindings.md`** 放**这个仓长什么样**：立卡入口与退码、队列字段真值、派活器与看守的
-  产物路径与退出码、模型批准集的三条真源、会话闸、攒批栅栏、复盘缺口证据链。
-- 换仓用这套技能 ⇒ **只换 repo-bindings 一份**，`SKILL.md` 一字不动。
-
-这与规范 §5（渐进加载第三层）、§6（引用只深一层）、§8（稳定写死 / 随环境变留参数）、
-§9 第 ⑤ 条（长表下沉 references）是同一件事。判据侧没有放松：`SKILL.md` 仍要过
-`skills/nails/check_skills.py` 四条（≤120 行 / 流程 ≤3 / 怎么读结果每条指向真脚本 / NOTES 三节）。
-
-搬走时顺手修掉的陈旧陈述：`risk` 的枚举 **`medium` → `mid`**（真源 `tools/wb_card.py:68` 的 choices、
-`tools/pool/ledger.py:276`/`:422` 的默认值；2026-11-08 实测队列 `mid` 200 条、`medium` 0 条）。
+顺手修掉 `risk` 枚举 `medium` → `mid`（真源 `tools/wb_card.py` 的 choices）。
+共同理由（规范 §5/§6/§8/§9 ⑤）与四条钉子只在 [`skills/README.md`](../README.md) §2 写一次，这里不重抄。
 
 ## 失败过什么（带读数）
 

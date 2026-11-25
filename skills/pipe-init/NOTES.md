@@ -34,26 +34,13 @@
   **全局**参数，正确式 `main.py --config pipeline.toml gate`（在铺出的骨架里 rc=0，输出
   `门禁总判决：pass（绿）`）。教训：**全局开关的位置错一次就会错第二次** —— 见到子命令后挂参数先怀疑。
 
-## ★ 为什么分「SKILL.md / references/repo-bindings.md」两页（2026-11-08）
+## ★ 两页怎么分（2026-11-08 泛用化）
 
-**问题**：`SKILL.md` 原来有一节「框架层 vs 本仓工作链」的两列表，把本仓的入口
-（`python -X utf8 tools/wb_*.py`）、本仓的门（`scripts/run_gates.py`，门表在 `gates/defs/`）、
-本仓根「没有 `pipeline.toml`」这些事实写在正文里，还有一节「复盘缺口」直接挂六个复盘文件名。
-换个仓，这三处全作废 —— 用户原话：「现在它们只针对 engineer 这个仓库，是不够的」，
-「建议是特定仓库表述下降到原来更下一层的 reference」。
-
-**判据**（`docs/reference/agent-skills-spec.md` §5 三层渐进加载 / §6 引用只深一层 /
-§8「稳定的写死、随环境变的留成参数」/ §9 第 ⑤ 条「长表下沉 references」）：
-
-| 放哪 | 放什么 | 判据 |
-|---|---|---|
-| `SKILL.md` | 铺骨架的动作、参数面、退出码读法、常见错 | 换一个仓，**一个字都不用改** |
-| `references/repo-bindings.md` | 本仓根有没有 `pipeline.toml`、CLI / 库 / 模板的路径、14 个文件、退出码原表、FW1/FW2 证据 | 换仓**只改这一份** |
-
-**搬走了什么**（行号是搬走前 `SKILL.md` 的行号）：`:10-20` 整节「框架层 vs 本仓工作链」两列表与
-「本仓根没有这份配置」两句、`:73-76` 整节「复盘缺口（框架两条总纲）」（含六个复盘文件名）、
-`:98` 结尾里 `framework/src/framework/scaffold.py` 与 `framework/templates/` 的指针
-（`SKILL.md` 仍留 `framework/cli/main.py` 的命令行 —— 那是「怎么读结果」每条必须带真脚本的钉子要求）。
+搬走的是**本仓三处事实**：入口 `python -X utf8 tools/wb_*.py`、门表在 `gates/defs/`、本仓根没有
+`pipeline.toml`；外加铺骨架的 14 个文件清单与六个复盘文件名 —— 全在
+[`references/repo-bindings.md`](references/repo-bindings.md)。`SKILL.md` 只留铺骨架的动作、参数面、
+退出码读法、常见错（`framework/cli/main.py` 的命令行留在正文，那是「怎么读结果」钉子的要求）。
+共同理由与四条钉子见 [`skills/README.md`](../README.md) §2。
 
 ## 脚本接口与以后怎么改
 

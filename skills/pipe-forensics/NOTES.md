@@ -49,16 +49,12 @@
 - 证据落点会随工具演进（新产物目录）⇒ 改 `references/evidence-map.md` 的表，别在正文堆新路径。
 - 换 harness 要改的只许集中在 `skills/GLUE-harness.md`。
 
-## ★ 为什么分「SKILL.md / references/repo-bindings.md」两页
+## ★ 两页怎么分（2026-11-08 泛用化）
 
-依据 `docs/reference/agent-skills-spec.md`：§5 渐进加载三层（正文每次激活都全额付钱，本仓收紧到 120 行）、
-§6 引用只深一层、§8「稳定的写死、随环境变的留成参数」、§9 第 ⑤ 条「长表下沉 references，正文给相对链接」。
+搬走的是**本仓证据落点**：具体路径、四条命令的参数、层归属（本仓根没有 `pipeline.toml`）、复盘缺口
+七条证据链（EN2 / LD1 / LD2 / LD3 / LD4 / DF1 / DF2）—— 全在
+[`references/repo-bindings.md`](references/repo-bindings.md)；`SKILL.md` 只留查证顺序与五步法。
 
-于是：查证顺序与五步法（换仓不变）留在 `SKILL.md`；证据落点的具体路径、四条命令的参数、
-层归属（本仓根没有 `pipeline.toml`）、复盘缺口 7 条证据链（EN2 / LD1 / LD2 / LD3 / LD4 / DF1 / DF2）
-搬到 `references/repo-bindings.md`。
-
-**改造中踩的坑（2026-11-08）**：把命令块改成 `<一屏核对> --tree .` 这类占位后，
-「怎么读结果」那几条**不能跟着占位** —— 钉子 C 要求每个 `- ` 条目里有反引号包住、真实存在、
-且落在 `tools/` `skills/` `framework/cli/` 三根之一的脚本路径。命令块用占位、读法条用真路径，
-这样既泛用又仍然可重跑。
+**踩的坑**：命令块改成 `<一屏核对> --tree .` 这类占位后，「怎么读结果」那几条**不能跟着占位** ——
+钉子 C 要求每个 `- ` 条目里有反引号包住、真实存在、且落在 `tools/` `skills/` `framework/cli/` 三根之一的脚本路径。
+命令块用占位、读法条用真路径，既泛用又仍然可重跑。共同理由与四条钉子见 [`skills/README.md`](../README.md) §2。

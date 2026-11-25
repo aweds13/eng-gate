@@ -30,23 +30,15 @@
 - 开卡与派活用 `pipe-card` / `softeng-manage` 的派活节。
 - 判「过不过门」用 `pipe-gate`；本技能不判断门本身。
 
-## ★ 为什么分「SKILL.md / references/repo-bindings.md」两页（2026-11-08）
+## ★ 两页怎么分（2026-11-08 泛用化）
 
-**问题**：这一页原来把本仓的勘察器路径、A 类读数（本仓有 `harness.toml` 与三件套）、
-卡登记目录、骨架文件数、快照命名全写在 `SKILL.md` 正文里。换个仓整页作废 ——
-用户原话：「现在它们只针对 engineer 这个仓库，是不够的」，「特定仓库表述下降到原来更下一层的 reference」。
+搬走的是**本仓形态**：勘察器路径、A 类读数（本仓有 `harness.toml` 与三件套）、卡登记目录、
+骨架 14 个文件、快照命名、本仓根没有 `pipeline.toml` 的前提 —— 全在
+[`references/repo-bindings.md`](references/repo-bindings.md)；`SKILL.md` 只留动作顺序、判据入口、
+读 JSON 的方法、常见误读。换仓只换 references 一份。
 
-**判据**（`docs/reference/agent-skills-spec.md` §5 三层渐进加载 / §6 引用只深一层 /
-§8「稳定的写死、随环境变的留成参数」/ §9 第 ⑤ 条「长表下沉 references」）：
-
-| 放哪 | 放什么 | 判据 |
-|---|---|---|
-| `SKILL.md` | 动作顺序、判据入口、读 JSON 的方法、常见误读 | 换一个仓，**一个字都不用改** |
-| `references/repo-bindings.md` | 本仓形态（A 类 / 两套入口 / 工具根数据根）、勘察器路径、骨架 14 个文件、卡登记位置、快照形状 | 换仓**只改这一份** |
-
-**搬走了什么**（行号是搬走前 `SKILL.md` 的行号）：`:30` 「本仓勘察结果应是 A」、`:39` 勘察器路径、
-`:44` JSON 键的数目与名单、`:46`/`:78` 的 `skills/pipe-takeover/references/…` 全路径、
-`:82` 的 `class`/`signals` 键名（错，已改正）、`:88` 的跨技能路径、`:50` 在本仓根没有 `pipeline.toml` 的前提。
+勘察 JSON 的键名当时写错过（`class` / `signals`），已按现读改正；改口径从来改 references，不改正文。
+共同理由与四条钉子见 [`skills/README.md`](../README.md) §2。
 
 ## 失败过什么（带读数）
 

@@ -108,9 +108,12 @@
 3. 引用**只深一层**：`SKILL.md` → `references/xxx.md`，别写「见 references/a.md 里的 b.md」。
 4. 判据侧**不放松**：`SKILL.md` 仍要过 `skills/nails/check_skills.py` 四条（≤120 行 / 流程级小节 ≤3 /
    「怎么读结果」每条指向真脚本 / `NOTES.md` 三节）。下沉之后这些约束反而更容易满足。
-5. 每个技能在自己 `NOTES.md` 里写一节「为什么分两页」，把搬走了什么、踩了什么坑记下来（下次别再犯）。
+5. 每个技能在自己 `NOTES.md` 里写一节「两页怎么分」：只写**本技能**搬走了什么 + 本技能踩的坑 +
+   一行回链。上面 1–4 条与规范条款的共同理由**不重抄**（要查就回本页 §2），否则九份副本必然各自漂。
 
 **已完成**：九个技能全部按这个形状改过（`pipe-gate` 是样板：`SKILL.md` 87 行 + `repo-bindings.md` 97 行）。
+2026-11-25（卡 E162）：九份 `NOTES.md` 那一节按第 5 条压成 2–6 行 —— 此前九份各自重抄了同一段规范条款、
+用户原话与四条钉子，合计 −91 行；共同理由只在上面这一节写一次。
 
 规范离线副本：`docs/reference/agent-skills-spec.md`；改技能时逐条过的自检表：
 `skills/softeng-manage/references/spec-checklist.md`。

@@ -7,6 +7,11 @@
 - docs/subsystems/ci/云门禁-可复现性清单.md 加 11 行页首现状注（2026-11-25 实测：对端已是 Ubuntu 24.04，administrator 与 root 都被拒，--gate-on cloud 退 2），并说清「§2 的 18 条判据常设有效 / §3·§6·§7 是当时现场 / 异地腿改走 GitHub-Actions」；§0 的「云门禁今天能跑」改成过去时；§3 表前与 §6 首句各补「2026-11-25 起没有可连的机器」。§2 主表 R1–R18、§3 十行读数、§6 七行步骤表、§7 边界一字未动。
 - docs/subsystems/ci/测试流程.md 两处补注：表一「谁能跑」说明里 2026-10-28 的 node v22.14.0 补装标为历史；§8 边界「云机慢不等于不能用」补一句「那是 2026-10 的判断，机器已不存在，本条留作『别拿速度当结论』的教训」。23 道门标题与 2026-10-25 耗时来源原样保留。
 - docs/INDEX.md 走生成器重算（497 篇），未手改。
+## 2026-11-25 T-AG698 文档治理收尾：云机口径残留 + 九份 NOTES 重复段
+- docs/subsystems/ci/测试流程.md 三处就地改：「谁能跑」说明改成「这道门挑不挑机器，不是现在有一台云机」，`ui_dom_probe` 行去掉「2026-10-28 起云机有 node」，§8 首条改成「三道 node 门要 node，谁跑都得先装」并补「那台机器 2026-11-25 起已不存在」。23 行门名与顺序、耗时来源一字未动。
+- docs/subsystems/ci/GitHub-Actions-云门禁.md 两处：§5 逐门耗时前的「22 门 exit_code=0」改成「23 道门里 22 道 0、render 记 EXCLUDED」；§8.4 第 2 条把 `[workflow].install`「连一个消费者都没有」改成「代码已接线（含 `_install_workflows()` 退码与三条测试），但五份 profile 都填」。
+- 九个 skills/*/NOTES.md 的「为什么分两页」一节各压到 2–6 行，只留本技能搬走了什么 + 本技能踩的坑 + 一行回链；skills/README.md §2 第 5 条同步改成「共同理由不重抄」。合计 −81 行。
+- docs/INDEX.md 走生成器重算（498 篇），未手改。
 ## 2026-11-22 T-AG687 症状行不许被 61 条 [OK ] 挤掉：detail 兜底 + 收口重打保留 ★
 - `scripts/run_gates.py`：新增 `_symptom_line()`，`gate_detail()` 在尾部窗口里没有 `SUSPECT_SHAPES` 命中时，从**全文**倒序捞最近一条症状行补到 `detail` 最前面；体积口径一个字没放宽（仍 ≤ 2000 字 / ≤ 20 行）。
 - `tools/web_live_check.py`：症状原文按名字记进旁路表（`mark_live_error()` / `live_lan_checks()` 各加可选第三参，默认 `None` ⇒ 既有调用点一字不改），收口抽成 `print_checks()`，`[FAIL] 名字` 后补回 `  ★ 症状原文`；名字形状没改。

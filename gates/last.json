@@ -1,67 +1,67 @@
 {
-  "rev": "8fc94584",
+  "rev": "4d6e178a",
   "python": "3.14.6",
   "host": "DEV-HOST",
-  "tree": "b8a1629f36715ab9e785d765ccf4233c375858db",
+  "tree": "bcc76d67742dc5bb028476e1c5ff9eb2673a18ba",
   "tree_scope": "worktree-minus-gates",
-  "parent": "8fc94584",
-  "branch": "HEAD",
+  "parent": "4d6e178a",
+  "branch": "card/E162",
   "dirty": true,
-  "at": "2026-11-25T16:34:23",
+  "at": "2026-11-25T20:37:08",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
   "ok": true,
-  "workers": 1,
+  "workers": 2,
   "pytest_dist": "worksteal",
   "co_tenants": {
     "collected": true,
     "like": 15,
-    "self_pid": 37992
+    "self_pid": 18340
   },
-  "pytest_mode": "串行（worker=1）",
+  "pytest_mode": "并行（pytest-xdist，-n 2）",
   "slow_doors": [],
   "gates": [
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 5.66,
+      "seconds": 10.86,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 0.2,
+      "seconds": 0.55,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.28,
+      "seconds": 0.55,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 3.32,
+      "seconds": 8.71,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 12.98,
+      "seconds": 28.32,
       "summary": "report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
     },
     {
       "name": "contract_doc_table",
       "exit_code": 0,
-      "seconds": 0.14,
-      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E161\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+      "seconds": 0.32,
+      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E162\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
       "detail": ""
     }
   ],
@@ -69,7 +69,7 @@
   "excluded": {},
   "reused": {},
   "untracked": [],
-  "trailer": "【必需 audit；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E161\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+  "trailer": "【必需 audit；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\E162\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
   "profiles_run": [
     "audit"
   ],
@@ -78,31 +78,51 @@
   ],
   "changed_paths": [
     "docs/INDEX.md",
-    "docs/changelog.d/T-AG697.md",
+    "docs/changelog.d/T-AG698.md",
     "docs/changelog.md",
-    "docs/subsystems/ci/云门禁-可复现性清单.md",
+    "docs/subsystems/ci/GitHub-Actions-云门禁.md",
     "docs/subsystems/ci/测试流程.md",
-    "docs/traceability.d/T-AG697.toml",
+    "docs/traceability.d/T-AG698.toml",
     "docs/traceability.toml",
+    "skills/README.md",
+    "skills/pipe-card/NOTES.md",
+    "skills/pipe-forensics/NOTES.md",
+    "skills/pipe-gate/NOTES.md",
+    "skills/pipe-init/NOTES.md",
+    "skills/pipe-land/NOTES.md",
+    "skills/pipe-new/NOTES.md",
+    "skills/pipe-takeover/NOTES.md",
+    "skills/pipe-workbench/NOTES.md",
+    "skills/softeng-manage/NOTES.md",
     "复盘/交接-重构进度.md",
-    "复盘/交接.d/T-AG697.md"
+    "复盘/交接.d/T-AG698.md"
   ],
   "select": {
     "changed": [
       "docs/INDEX.md",
       "docs/changelog.md",
-      "docs/subsystems/ci/云门禁-可复现性清单.md",
+      "docs/subsystems/ci/GitHub-Actions-云门禁.md",
       "docs/subsystems/ci/测试流程.md",
       "docs/traceability.toml",
+      "skills/README.md",
+      "skills/pipe-card/NOTES.md",
+      "skills/pipe-forensics/NOTES.md",
+      "skills/pipe-gate/NOTES.md",
+      "skills/pipe-init/NOTES.md",
+      "skills/pipe-land/NOTES.md",
+      "skills/pipe-new/NOTES.md",
+      "skills/pipe-takeover/NOTES.md",
+      "skills/pipe-workbench/NOTES.md",
+      "skills/softeng-manage/NOTES.md",
       "复盘/交接-重构进度.md",
-      "docs/changelog.d/T-AG697.md",
-      "docs/traceability.d/T-AG697.toml",
-      "复盘/交接.d/T-AG697.md"
+      "docs/changelog.d/T-AG698.md",
+      "docs/traceability.d/T-AG698.toml",
+      "复盘/交接.d/T-AG698.md"
     ],
     "tests": [],
     "fallback": false,
     "reason": "只有记账/文档改动 ⇒ 没有代码用例要跑（全量仍在收口链 ④）",
     "gates": []
   },
-  "sealed_at": "2026-11-25T16:34:26"
+  "sealed_at": "2026-11-25T20:37:22"
 }
