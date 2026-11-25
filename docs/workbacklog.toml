@@ -7449,3 +7449,32 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E162"
+task = "T-AG698"
+title = "文档治理收尾：云机口径残留 + 九份 NOTES 重复段"
+tree = ".wt/E162"
+spec = "复盘/卡/卡E162-文档治理收尾-云机口径与NOTES重复段.md"
+files = [
+  "docs/subsystems/ci/测试流程.md",
+  "docs/subsystems/ci/GitHub-Actions-云门禁.md",
+  "skills/README.md",
+  "skills/pipe-card/NOTES.md",
+  "skills/pipe-forensics/NOTES.md",
+  "skills/pipe-gate/NOTES.md",
+  "skills/pipe-init/NOTES.md",
+  "skills/pipe-land/NOTES.md",
+  "skills/pipe-new/NOTES.md",
+  "skills/pipe-takeover/NOTES.md",
+  "skills/pipe-workbench/NOTES.md",
+  "skills/softeng-manage/NOTES.md",
+  "docs/INDEX.md",
+  "docs/changelog.d/T-AG698.md",
+  "docs/traceability.d/T-AG698.toml"
+]
+depends = [
+  "E161"
+]
+risk = "low"
+status = "pending"
