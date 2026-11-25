@@ -3,6 +3,10 @@
 - docs/subsystems/ci/门禁自证-product.md 的 22 道门改 23（gates/gate-selfproof.toml 实测 23 个 [[cases]]）；docs/文档系统导航.md 新增 §2.6「我要查某个子系统（CI / 号池）」（此前该页零处指向 docs/subsystems/），:3 的「五类意图」改「六类」，AGENTS.md :14 同一条投影同步加「/ 查子系统」。
 - .gitignore 补 gates/enggate-logs/（docs/subsystems/ci/GitHub-Actions-云门禁.md 早已声明它不进仓，但 check-ignore 一直是 rc=1）。
 - docs/INDEX.md 走生成器重算（496 篇），未手改。
+## 2026-11-25 T-AG697 云门禁清单与测试流程的「云机可用」口气与现实对齐
+- docs/subsystems/ci/云门禁-可复现性清单.md 加 11 行页首现状注（2026-11-25 实测：对端已是 Ubuntu 24.04，administrator 与 root 都被拒，--gate-on cloud 退 2），并说清「§2 的 18 条判据常设有效 / §3·§6·§7 是当时现场 / 异地腿改走 GitHub-Actions」；§0 的「云门禁今天能跑」改成过去时；§3 表前与 §6 首句各补「2026-11-25 起没有可连的机器」。§2 主表 R1–R18、§3 十行读数、§6 七行步骤表、§7 边界一字未动。
+- docs/subsystems/ci/测试流程.md 两处补注：表一「谁能跑」说明里 2026-10-28 的 node v22.14.0 补装标为历史；§8 边界「云机慢不等于不能用」补一句「那是 2026-10 的判断，机器已不存在，本条留作『别拿速度当结论』的教训」。23 道门标题与 2026-10-25 耗时来源原样保留。
+- docs/INDEX.md 走生成器重算（497 篇），未手改。
 ## 2026-11-22 T-AG687 症状行不许被 61 条 [OK ] 挤掉：detail 兜底 + 收口重打保留 ★
 - `scripts/run_gates.py`：新增 `_symptom_line()`，`gate_detail()` 在尾部窗口里没有 `SUSPECT_SHAPES` 命中时，从**全文**倒序捞最近一条症状行补到 `detail` 最前面；体积口径一个字没放宽（仍 ≤ 2000 字 / ≤ 20 行）。
 - `tools/web_live_check.py`：症状原文按名字记进旁路表（`mark_live_error()` / `live_lan_checks()` 各加可选第三参，默认 `None` ⇒ 既有调用点一字不改），收口抽成 `print_checks()`，`[FAIL] 名字` 后补回 `  ★ 症状原文`；名字形状没改。

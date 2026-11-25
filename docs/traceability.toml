@@ -13218,3 +13218,15 @@ evidence = [
   "file:.gitignore",
 ]
 gaps = "1. 「云门禁机.md 只能当历史运维手册读」这条只靠页首 8 行注告诉读者，没有机器判据钉住（没有测试断言那台机器的现状）；页内 §1–§8 的装机/变配/A-B/37 红分类读数仍是 2026-10 的现场记录，本卡故意没改（读者拿它们当过程看，不是当现状）。指针 docs/subsystems/ci/云门禁机.md2. 「测试流程.md 六处改完就等于全仓不再把云机当默认」是推断不是读数：复盘与 changelog 里仍有多处历史记录写「云机」（台账、复盘卡、changelog），它们按 doc-write 问题 2 属于「当时的决定」⇒ 加注/保留，不在本卡范围。指针 docs/subsystems/ci/测试流程.md3. gates/enggate-logs/ 只是进了 .gitignore，本机那 12 MB 未跟踪日志仍在盘上（不清、不删）——「不进仓」与「不占盘」是两件事，后者是清理范畴。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md"
+
+[entries."T-AG697"]
+id = "T-AG697"
+title = "云门禁清单与测试流程的云机口气与现实对齐（T-AG697）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/云门禁-可复现性清单.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "test:test_ci_portability.py::test_doc_rows_are_all_machine_checkable",
+]
+gaps = "1. 「云门禁-可复现性清单.md 的 §2 主表 R1–R18 常设有效」是设计判断，没有测试钉住这句话本身 —— 钉住的只是表结构（R 连号 / 6 列 / 判据节点可解析）。读者若把「常设有效」误读成「现在跑得通」，页首注已明写机器不存在、退 2。指针 docs/subsystems/ci/云门禁-可复现性清单.md2. 本卡只改了两页「会被当现状用」的口气；复盘/ 与 docs/changelog 里大量历史记录仍写「云机」（台账、复盘卡、changelog 条目），按 doc-write 问题 2 属于「当时的决定」⇒ 保留不改，不在本卡范围。指针 docs/subsystems/ci/测试流程.md3. 卡 E160 的 checkpoint 里有一句「测试流程.md §8 边界八条的『云机慢不等于不能用』未改」——本卡把它改了（补了一句「2026-11-25 起那台机器已不存在」）。这是有意覆盖前卡留下的缺口，不是推翻前卡的结论。指针 docs/subsystems/ci/测试流程.md"
