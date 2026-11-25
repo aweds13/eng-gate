@@ -1,3 +1,8 @@
+## 2026-11-25 T-AG696 云门禁三页文档与现实对齐：云机标注为历史、门数 22→23、导航补子系统入口
+- docs/subsystems/ci/云门禁机.md 加 8 行页首现状注（2026-11-25 实测对端是 Ubuntu 24.04、administrator 与 root 都 Permission denied ⇒ 该页降级为历史运维手册；要跑门禁只剩本机 --gate-on local 与 GitHub-Actions-云门禁两条腿），:11 之后一字未动；docs/subsystems/ci/测试流程.md 六处就地改（异机维 / 决策树两处 / 时机表两处 / §7 命令块），表一 23 道标题与 2026-10-25 耗时来源原样保留。
+- docs/subsystems/ci/门禁自证-product.md 的 22 道门改 23（gates/gate-selfproof.toml 实测 23 个 [[cases]]）；docs/文档系统导航.md 新增 §2.6「我要查某个子系统（CI / 号池）」（此前该页零处指向 docs/subsystems/），:3 的「五类意图」改「六类」，AGENTS.md :14 同一条投影同步加「/ 查子系统」。
+- .gitignore 补 gates/enggate-logs/（docs/subsystems/ci/GitHub-Actions-云门禁.md 早已声明它不进仓，但 check-ignore 一直是 rc=1）。
+- docs/INDEX.md 走生成器重算（496 篇），未手改。
 ## 2026-11-22 T-AG687 症状行不许被 61 条 [OK ] 挤掉：detail 兜底 + 收口重打保留 ★
 - `scripts/run_gates.py`：新增 `_symptom_line()`，`gate_detail()` 在尾部窗口里没有 `SUSPECT_SHAPES` 命中时，从**全文**倒序捞最近一条症状行补到 `detail` 最前面；体积口径一个字没放宽（仍 ≤ 2000 字 / ≤ 20 行）。
 - `tools/web_live_check.py`：症状原文按名字记进旁路表（`mark_live_error()` / `live_lan_checks()` 各加可选第三参，默认 `None` ⇒ 既有调用点一字不改），收口抽成 `print_checks()`，`[FAIL] 名字` 后补回 `  ★ 症状原文`；名字形状没改。

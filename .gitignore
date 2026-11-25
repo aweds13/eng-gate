@@ -125,6 +125,13 @@ gates/tia.json
 # 而 `scripts/check_docs.py` 的判死指针结果会随「这台机器跑过几次落地」漂 2 条。
 gates/review/
 
+# GHA 云门禁那趟在**本机**下载回来的 job 日志（`docs/subsystems/ci/GitHub-Actions-云门禁.md`
+# 写着「本机落盘在 gates/enggate-logs 下，不进仓」—— 但这条规则此前并不存在，于是每读
+# 一次读数就多一堆未跟踪 .log，`git status` 与 check_docs 都会跟着漂）。
+# 与 gates/logs/ 同理：入库的只有结论（gates/last.json / gates/enggate-logs 里挑出来的 reading），
+# 原始 job 日志是本机诊断产物。
+gates/enggate-logs/
+
 # worktrees
 .wt/
 

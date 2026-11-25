@@ -1,0 +1,15 @@
+[entries."T-AG696"]
+id = "T-AG696"
+title = "docs(ci): 云门禁三页与现实对齐 + 导航补 subsystems 入口（T-AG696）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:docs/subsystems/ci/门禁自证-product.md",
+  "file:docs/文档系统导航.md",
+  "file:AGENTS.md",
+  "file:.gitignore",
+]
+gaps = "1. 「云门禁机.md 只能当历史运维手册读」这条只靠页首 8 行注告诉读者，没有机器判据钉住（没有测试断言那台机器的现状）；页内 §1–§8 的装机/变配/A-B/37 红分类读数仍是 2026-10 的现场记录，本卡故意没改（读者拿它们当过程看，不是当现状）。指针 docs/subsystems/ci/云门禁机.md2. 「测试流程.md 六处改完就等于全仓不再把云机当默认」是推断不是读数：复盘与 changelog 里仍有多处历史记录写「云机」（台账、复盘卡、changelog），它们按 doc-write 问题 2 属于「当时的决定」⇒ 加注/保留，不在本卡范围。指针 docs/subsystems/ci/测试流程.md3. gates/enggate-logs/ 只是进了 .gitignore，本机那 12 MB 未跟踪日志仍在盘上（不清、不删）——「不进仓」与「不占盘」是两件事，后者是清理范畴。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md"
+

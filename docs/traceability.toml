@@ -13203,3 +13203,18 @@ evidence = [
   "test:test_wb_status.py::test_reconcile_green_when_ledger_has_entry",
 ]
 gaps = "- `queued` 从 dict 改成 set 没修掉任何 bug：两种写法的键集合完全相同（task 号作键），判孤儿的行为改前改后一致；改 set 只为不让后来人以为 `queued[mark]` 能取到那张卡。指针 `tools/wb_queue_audit.py`。- 「必须带 evidence 才算登记」今天没挡下任何真孤儿：evidence 为空的只有 SR-F2.8 与 SR-F8.4b，两个号都不在 git 的 618 个 Task 号里 ⇒ 这条今天是防线不是修正。指针 `docs/traceability.toml`。- 3 张真·一卡两号（A289/T-AG403、E49/T-AG499、E54/T-AG505）没有定性，本卡只保证它们还红着；要不要拆卡得单独开卡并问用户。指针 `docs/workbacklog.toml`。- `LANDING_EXEMPT_DIRS`（docs/ 复盘/ skills/ + gates/last.json）是照 29 条实读定的经验值：将来「只改 src/ 一行、整笔无代码语义」的簿记笔会被算成落地笔（宁可多报，不静默豁免）。指针 `tools/wb_queue_audit.py`。- 这条判据不是门禁：`scripts/` 与 `gates/defs/` 对 `wb_queue_audit` 零命中，唯一咬它的是 tests 里那三份 ⇒ 「门禁全绿」不等于「这条判据读全了」。指针 `tests/test_wb_queue_audit.py`。"
+
+[entries."T-AG696"]
+id = "T-AG696"
+title = "docs(ci): 云门禁三页与现实对齐 + 导航补 subsystems 入口（T-AG696）"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:docs/subsystems/ci/云门禁机.md",
+  "file:docs/subsystems/ci/测试流程.md",
+  "file:docs/subsystems/ci/门禁自证-product.md",
+  "file:docs/文档系统导航.md",
+  "file:AGENTS.md",
+  "file:.gitignore",
+]
+gaps = "1. 「云门禁机.md 只能当历史运维手册读」这条只靠页首 8 行注告诉读者，没有机器判据钉住（没有测试断言那台机器的现状）；页内 §1–§8 的装机/变配/A-B/37 红分类读数仍是 2026-10 的现场记录，本卡故意没改（读者拿它们当过程看，不是当现状）。指针 docs/subsystems/ci/云门禁机.md2. 「测试流程.md 六处改完就等于全仓不再把云机当默认」是推断不是读数：复盘与 changelog 里仍有多处历史记录写「云机」（台账、复盘卡、changelog），它们按 doc-write 问题 2 属于「当时的决定」⇒ 加注/保留，不在本卡范围。指针 docs/subsystems/ci/测试流程.md3. gates/enggate-logs/ 只是进了 .gitignore，本机那 12 MB 未跟踪日志仍在盘上（不清、不删）——「不进仓」与「不占盘」是两件事，后者是清理范畴。指针 docs/subsystems/ci/GitHub-Actions-云门禁.md"
