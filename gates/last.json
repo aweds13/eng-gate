@@ -1,82 +1,75 @@
 {
-  "rev": "e8a1bcdf",
+  "rev": "1482d2a8",
   "python": "3.14.6",
   "host": "DEV-HOST",
-  "tree": "3b5a4bbd53117237db669d91afce816d21f5aa78",
+  "tree": "3765a6d222dd4b90cfac36c9bb80533abe3813ff",
   "tree_scope": "worktree-minus-gates",
-  "parent": "e8a1bcdf",
-  "branch": "line/impl-v1",
-  "dirty": true,
-  "at": "2026-11-25T21:09:41",
+  "parent": "1482d2a8",
+  "branch": "HEAD",
+  "dirty": false,
+  "at": "2026-11-25T21:42:43",
   "quick": false,
   "docs_sync_ok": true,
   "docs_sync_missing": [],
   "ok": true,
-  "workers": 2,
+  "workers": 1,
   "pytest_dist": "worksteal",
   "co_tenants": {
     "collected": true,
-    "like": 12,
-    "self_pid": 31380
+    "like": 13,
+    "self_pid": 12576
   },
-  "pytest_mode": "并行（pytest-xdist，-n 2）",
+  "pytest_mode": "串行（worker=1）",
   "slow_doors": [],
   "gates": [
     {
       "name": "audit",
       "exit_code": 0,
-      "seconds": 6.12,
+      "seconds": 15.51,
       "summary": "审计通过 ✅（豁免 0 项已知欠账）",
       "detail": ""
     },
     {
       "name": "invariants",
       "exit_code": 0,
-      "seconds": 0.41,
+      "seconds": 0.55,
       "summary": "[OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）",
       "detail": ""
     },
     {
       "name": "audit_titles",
       "exit_code": 0,
-      "seconds": 0.57,
+      "seconds": 0.75,
       "summary": "OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位",
       "detail": ""
     },
     {
       "name": "docs",
       "exit_code": 0,
-      "seconds": 7.9,
+      "seconds": 8.71,
       "summary": "CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS",
       "detail": ""
     },
     {
       "name": "skills_claims",
       "exit_code": 0,
-      "seconds": 29.97,
+      "seconds": 32.17,
       "summary": "report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。",
       "detail": ""
     },
     {
       "name": "contract_doc_table",
       "exit_code": 0,
-      "seconds": 0.29,
-      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+      "seconds": 0.4,
+      "summary": "[OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\gates-refresh\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
       "detail": ""
     }
   ],
   "not_run": [],
   "excluded": {},
   "reused": {},
-  "untracked": [
-    "research/webview-plugin-mechanism.md",
-    "磁盘体检报告-C盘-终版.html",
-    "磁盘体检报告-C盘.html",
-    "磁盘体检报告-D盘-终版.html",
-    "磁盘体检报告-D盘.html",
-    "磁盘清理报告-2026-11-22.md"
-  ],
-  "trailer": "【必需 lang+audit+product（全量：有路径判不出档）；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
+  "untracked": [],
+  "trailer": "【必需 lang+audit+product（全量：有路径判不出档）；真跑全了 audit】【只跑全了 audit 档，未跑全量】audit 审计通过 ✅（豁免 0 项已知欠账）; invariants [OK ] 台账 79 条全部核过：判据路径与钉子用例名都在（covered 54 / partial 18 / missing 6；后两类是状态、不是错误）; audit_titles OK 规则 A 对账通过：73 条 SR 卡全部有同号规格，0 条错位; docs CHECK_DOCS: 没判完（有 skip）—— 不许当 PASS; skills_claims report 档读数：对不上 0 / 判不出 78 —— 判不出本档不红（技能正文里的占位符/通配名是指令的固有形态），**这不是 PASS**；`--mode block` 会按三态退码。; contract_doc_table [OK ] 对账表逐格对上（D:/repo/engineering\\.wt\\gates-refresh\\复盘\\契约-判据对账.md：源行号 / 原句子串 / 判据标签 / 段标题条数）",
   "profiles_run": [
     "audit"
   ],
@@ -86,5 +79,5 @@
     "product"
   ],
   "changed_paths": [],
-  "sealed_at": "2026-11-25T21:13:04"
+  "sealed_at": "2026-11-25T21:50:05"
 }
