@@ -7430,3 +7430,22 @@ depends = [
 ]
 risk = "low"
 status = "done"
+
+[[cards]]
+id = "E161"
+task = "T-AG697"
+title = "云门禁清单与测试流程的云机口气与现实对齐"
+tree = ".wt/E161"
+spec = "复盘/卡/卡E161-云门禁清单的云机口气与现实对齐.md"
+files = [
+  "docs/subsystems/ci/云门禁-可复现性清单.md",
+  "docs/subsystems/ci/测试流程.md",
+  "docs/INDEX.md",
+  "docs/changelog.d/T-AG697.md",
+  "docs/traceability.d/T-AG697.toml"
+]
+depends = [
+  "E160"
+]
+risk = "low"
+status = "pending"
