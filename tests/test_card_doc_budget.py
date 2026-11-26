@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import card_doc_budget as budget  # noqa: E402
+import git_anchor  # noqa: E402 —— 卡 E163：纯数字短 sha 现取，不钉住某一笔
 
 # ---------------------------------------------------------- 合规（绿）
 _CP_OK = """\
@@ -153,10 +154,14 @@ def test_numeric_short_sha_is_still_a_pointer(tmp_path):
     钉的是"纯数字候选要**实测**、是 git 对象才算指针"，**不是**"数字都算指针"：
     同一串数字在**没有**这个对象的仓库里，照旧不算指针（见断言 ②）。
     """
-    # ① 一个**真实存在**的纯数字短 sha（本仓 2026-10-14 那笔，仍在历史里可达）⇒ 必须算指针
-    assert budget.check_pointers("1. 见提交 2051255。", root=ROOT) == []
+    # ① 从**本仓当前历史**现取一笔纯数字短 sha（2026-10-14 钉的是 2051255；镜像仓历史被
+    #   重写过，那一笔不在 ⇒ 钉住具体某一笔等于断言「历史里永远有它」）⇒ 必须算指针
+    sha = git_anchor.numeric_short_sha(ROOT)
+    if not sha:
+        pytest.skip("本仓历史里没有纯数字短 sha —— 这条判据的前提不成立")
+    assert budget.check_pointers(f"1. 见提交 {sha}。", root=ROOT) == []
     # ② 同一串数字，在**没有**这个对象的仓库里 ⇒ 不许算指针（不然就是把「数字」当「指针」）
-    assert budget.check_pointers("1. 见提交 2051255。", root=tmp_path) == [
+    assert budget.check_pointers(f"1. 见提交 {sha}。", root=tmp_path) == [
         "gaps 第 1 条没有指针（须带文件路径 / commit sha / 快照 id）"]
 
 

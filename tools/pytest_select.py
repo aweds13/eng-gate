@@ -459,7 +459,10 @@ def log_batch(count: int, root: Path | None = None) -> dict[str, tuple[str, tupl
         if not rev:
             continue
         files = tuple(p.strip() for p in rest.split("\x00") if p.strip())
-        rows[rev] = (task.strip(), files)
+        # ★ 卡 E163：没有 Task: trailer 的提交，%x1f 后面紧跟的是 -z 的记录分隔符 NUL，
+        #   task.strip() 会把 NUL 留下来 ⇒ 与逐笔读的 git_task()（空串）对不上，
+        #   判据报「assert '\x00' == ''」。剥掉 NUL 与空白才是「这一笔没有台账号」。
+        rows[rev] = (task.strip("\x00 \t\r\n"), files)
     return rows
 
 

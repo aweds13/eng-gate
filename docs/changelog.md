@@ -1,3 +1,7 @@
+## 2026-11-26 T-AG699 写死 sha 的判据改成按台账号反查 + log_batch 不把 NUL 当台账号
+- 新建 tools/git_anchor.py：exists / find_by_task（取最老那笔）/ anchor（本仓是对象就原样返回，否则反查，都查不到原样返回）/ numeric_short_sha（从当前历史现取纯数字短 sha）。
+- tools/pytest_select.py 的 log_batch() 改成 `task.strip("\x00 \t\r\n")`：没有 Task: trailer 的提交，%x1f 后面紧跟 -z 的记录分隔符 NUL，原来会把它当台账号，与逐笔读的 git_task()（空串）对不上。
+- 三处写死 sha 的判据改走锚点：tests/test_pool_sink_wiring.py（eaeb3923 / T-AG562）、tests/test_pool_failclosed.py（e3641bb9… / T-AG538，env 覆盖口径不变）、tests/test_card_doc_budget.py（2051255 改成现取）；源仓里三个 sha 仍是对象 ⇒ 行为逐字不变。新建 tests/test_git_anchor.py 七条判据钉住这套口径（含 log_batch 那条回归，修复前实测真红）。
 ## 2026-11-25 T-AG696 云门禁三页文档与现实对齐：云机标注为历史、门数 22→23、导航补子系统入口
 - docs/subsystems/ci/云门禁机.md 加 8 行页首现状注（2026-11-25 实测对端是 Ubuntu 24.04、administrator 与 root 都 Permission denied ⇒ 该页降级为历史运维手册；要跑门禁只剩本机 --gate-on local 与 GitHub-Actions-云门禁两条腿），:11 之后一字未动；docs/subsystems/ci/测试流程.md 六处就地改（异机维 / 决策树两处 / 时机表两处 / §7 命令块），表一 23 道标题与 2026-10-25 耗时来源原样保留。
 - docs/subsystems/ci/门禁自证-product.md 的 22 道门改 23（gates/gate-selfproof.toml 实测 23 个 [[cases]]）；docs/文档系统导航.md 新增 §2.6「我要查某个子系统（CI / 号池）」（此前该页零处指向 docs/subsystems/），:3 的「五类意图」改「六类」，AGENTS.md :14 同一条投影同步加「/ 查子系统」。

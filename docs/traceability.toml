@@ -13245,3 +13245,20 @@ evidence = [
   "file:skills/softeng-manage/NOTES.md",
 ]
 gaps = "1. 九份 NOTES 压短后，读者若想追问「当初为什么这么分」，只能回 skills/README.md §2 读一次 —— 那是有意的单点，但也意味着 §2 若被改坏，九份副本不会自证。指针 skills/README.md2. `[workflow].install` 本卡只把文档口径改成「代码已接线、五份 profile 都没填」，并没有真填一份去跑 —— 这条键仍是「没在真跑里用过」。指针 scripts/cloud/gha/build_snapshot.py3. 本卡没碰 `云门禁-可复现性清单.md`（E161 刚改），也没动 `测试流程.md` 的 23 行门表与耗时来源；门数/耗时那两处仍是 2026-10-25 的历史读数，将来真要更新是另一张卡的事。指针 docs/subsystems/ci/测试流程.md"
+
+[entries."T-AG699"]
+id = "T-AG699"
+title = "写死 sha 的判据改成按台账号反查 + log_batch 不把 NUL 当台账号"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/git_anchor.py",
+  "file:tools/pytest_select.py",
+  "file:tests/test_git_anchor.py",
+  "file:tests/test_pool_sink_wiring.py",
+  "file:tests/test_pool_failclosed.py",
+  "file:tests/test_card_doc_budget.py",
+  "file:docs/changelog.d/T-AG699.md",
+  "file:docs/traceability.d/T-AG699.toml",
+]
+gaps = "1. 三条写死 sha 的判据改成按 `Task:` trailer 反查后，**判据强度靠「台账号唯一」撑着**：若哪天同一张卡被复用（补规格 / 重跑落地）写了不同的东西，`find_by_task()` 取最老那笔仍是当初那一笔 —— 这个口径是对的，但它要求**台账号真的唯一**，台账里不许一号两卡。指针 tools/git_anchor.py2. 本卡只在**本机镜像副本** `C:/tmp/engpub/eng3` 上验了四条红转绿，没有在真 GitHub runner 上再跑一次；真跑要等镜像仓重写历史并推上去之后。指针 tests/test_git_anchor.py3. `tools/pytest_select.py` 的 NUL bug 修的是 `log_batch()` 一处；`git_task()` / `git_changed()` 两条逐笔命令本就正确，没有第二处同类解析。指针 tools/pytest_select.py"

@@ -38,6 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+import git_anchor  # noqa: E402 —— 卡 E163：写死 sha 的锚点
 import pool_accounts  # noqa: E402 —— tools/ 已在 sys.path 上
 import pytest  # noqa: E402
 from pool import failclosed, guards, model_registry, registry  # noqa: E402
@@ -55,7 +56,10 @@ GOLDEN_TREE_DOC = "一棵树同时只能有一个活租约（主树尤其）—�
 
 #: 卡 A336 落地的那一笔（`git log --grep T-AG538`）。「只加 docstring」的比对锚在这笔身上，
 #: **不是** `HEAD` —— 拿 `HEAD` 比会把后来每一张正常改这四个文件的卡都判红。
-CARD_COMMIT = os.environ.get("TF_CARD_A336_COMMIT", "e3641bb9aa150e660b3b771a34b0116fd3736250")
+#: ★ 卡 E163：镜像仓历史被重写过，写死的全 sha 在那里不是对象 ⇒ 默认值按台账号反查；
+#:   源仓里那一笔仍在，anchor() 原样返回写死的值（含 env 覆盖口径不变）。
+CARD_COMMIT = os.environ.get("TF_CARD_A336_COMMIT") or git_anchor.anchor(
+    "e3641bb9aa150e660b3b771a34b0116fd3736250", "T-AG538", ROOT)
 #: 卡 A336 只加 docstring 的四个文件。
 CARD_FILES = ("tools/pool/guards.py", "tools/pool/registry.py",
               "tools/pool/model_registry.py", "tools/pool_accounts.py")

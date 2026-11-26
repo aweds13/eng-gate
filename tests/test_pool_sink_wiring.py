@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 import test_wb_dispatch as twd
 
+from tools import git_anchor
 from tools import wb_session as wb_session
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -260,7 +261,10 @@ def test_balance_exhausted_is_never_sunk(
 def _baseline_source() -> str:
     import subprocess
 
-    done = subprocess.run(["git", "show", "eaeb3923:tools/pool/sink.py"], cwd=str(ROOT),
+    # ★ 卡 E163：写死的 sha 在镜像仓（历史被重写过）里不存在 ⇒ 按 Task: trailer 反查。
+    #   源仓里 eaeb3923 仍是对象，anchor() 原样返回它 ⇒ 行为逐字不变。
+    rev = git_anchor.anchor("eaeb3923", "T-AG562", ROOT)
+    done = subprocess.run(["git", "show", rev + ":tools/pool/sink.py"], cwd=str(ROOT),
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert done.returncode == 0, f"读不到基准版本的 sink.py：{done.stderr}"
     return done.stdout

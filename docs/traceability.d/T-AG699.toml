@@ -1,0 +1,17 @@
+[entries."T-AG699"]
+id = "T-AG699"
+title = "写死 sha 的判据改成按台账号反查 + log_batch 不把 NUL 当台账号"
+group = "ENGINEERING"
+status = "done"
+evidence = [
+  "file:tools/git_anchor.py",
+  "file:tools/pytest_select.py",
+  "file:tests/test_git_anchor.py",
+  "file:tests/test_pool_sink_wiring.py",
+  "file:tests/test_pool_failclosed.py",
+  "file:tests/test_card_doc_budget.py",
+  "file:docs/changelog.d/T-AG699.md",
+  "file:docs/traceability.d/T-AG699.toml",
+]
+gaps = "1. 三条写死 sha 的判据改成按 `Task:` trailer 反查后，**判据强度靠「台账号唯一」撑着**：若哪天同一张卡被复用（补规格 / 重跑落地）写了不同的东西，`find_by_task()` 取最老那笔仍是当初那一笔 —— 这个口径是对的，但它要求**台账号真的唯一**，台账里不许一号两卡。指针 tools/git_anchor.py2. 本卡只在**本机镜像副本** `C:/tmp/engpub/eng3` 上验了四条红转绿，没有在真 GitHub runner 上再跑一次；真跑要等镜像仓重写历史并推上去之后。指针 tests/test_git_anchor.py3. `tools/pytest_select.py` 的 NUL bug 修的是 `log_batch()` 一处；`git_task()` / `git_changed()` 两条逐笔命令本就正确，没有第二处同类解析。指针 tools/pytest_select.py"
+
