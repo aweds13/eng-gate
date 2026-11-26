@@ -96,7 +96,7 @@
 | 实现体量 | **24583 行** / **54 个文件**（53 个模块 + `__init__.py`） | `wc -l tools/pool/*.py`（与 §1 同源，一次现算） |
 | 队列卡数 | 451 张（441 done / 10 pending） | 读 `docs/workbacklog.toml` 的 `cards`，按 `status` 分 |
 | 批预声明 | 152 份 | 主工作树 `gates/diag/batch/*.toml` 的份数（卡树里读成 0） |
-| 派活日志 | 243 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
+| 派活日志 | 3 份（不含 `wb-usage.jsonl`） | 主工作树 `gates/diag/wb-*.jsonl` 减 `wb-usage.jsonl` |
 | 单次派活墙钟 | 不写死：见右列 | 每份日志首个/末个 `__timestamp` 之差；只统计**有 ≥2 个** `__timestamp` 的日志 |
 | 最近一份跑完的 | 不写死：见右列 | 同上；取 `gates/diag/wb-*.jsonl` 里 mtime 最新、且 ≥2 个 `__timestamp` 的那份 |
 <!-- pool-margin:end -->

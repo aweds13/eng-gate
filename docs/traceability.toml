@@ -29,6 +29,13 @@
 #      （T-G18 抓到的 `SR-F1.7` 就是这种）。只查 `todo`：`partial` 可以合法地"卡片都完了、
 #      还剩一句不靠卡片的缺口"。
 
+# GHA cloud gate snapshot: files this build commit touches
+claimed_files_exempt = [
+  "tests/test_windows_autostart_e2e.py",
+  "tests/conftest.py",
+  ".github/**",
+]
+
 [meta]
 acknowledged_routes = []
 # ⑧ 提交信息逐条检查的**基线**（T-G22）：从这条提交往后，每条提交的 `Task:` 必须恰好

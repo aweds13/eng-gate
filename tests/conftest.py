@@ -218,3 +218,46 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if _chain_key(item.nodeid) in want:
             item.add_marker(pytest.mark.chain)
+
+
+def pytest_addoption(parser):
+    """CI 外壳垫片：只在 pytest-cov 不在时注册同名占位选项。"""
+    try:
+        import pytest_cov  # noqa: F401
+        return
+    except Exception:
+        pass
+    group = parser.getgroup("cov-shim")
+    group.addoption("--cov", action="append", default=[], help="(shim) 覆盖率插件占位")
+    group.addoption("--cov-report", action="append", default=[], help="(shim)")
+    group.addoption("--cov-fail-under", action="store", default=None, help="(shim)")
+    group.addoption("--cov-config", action="store", default=None, help="(shim)")
+    group.addoption("--no-cov", action="store_true", default=False, help="(shim)")
+    group.addoption("--cov-branch", action="store_true", default=False, help="(shim)")
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """GHA 云门禁回传（适配器 v14）：绿灯也要有读数。
+
+    为什么要有这个钩子：pytest 默认捕获 stdout，`-q` 只在**失败**时把 Captured stdout
+    打出来 ⇒ v13 那趟 23 门全绿、作业日志里 `grep -c GHA-GATE` = 0，证据链断了
+    （成功反而查不到读数）。适配器跑完把同一份读数写进 gates/diag/_gha_reading.json，
+    这个钩子在收尾阶段（不受 capture 影响）原样打一遍；文件不在就什么都不做 ——
+    本机跑、门禁自己那次 pytest 都没有这个文件，行为与以前一样。
+    """
+    import os as _os
+
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    path = _os.path.join(root, "gates", "diag", "_gha_reading.json")
+    if not _os.path.exists(path):
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            blob = fh.read().strip()
+    except Exception:
+        return
+    if not blob.startswith("{"):
+        return
+    terminalreporter.write_line("=== GHA-GATE-READING-BEGIN ===")
+    terminalreporter.write_line(blob)
+    terminalreporter.write_line("=== GHA-GATE-READING-END ===")
