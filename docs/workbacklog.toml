@@ -7480,6 +7480,28 @@ risk = "low"
 status = "done"
 
 [[cards]]
+id = "E163"
+task = "T-AG699"
+title = "写死 sha 的判据改成按台账号反查 + log_batch 不把 NUL 当台账号"
+tree = ".wt/E163"
+spec = "复盘/卡/卡E163-写死sha改按台账号反查.md"
+files = [
+  "tools/git_anchor.py",
+  "tools/pytest_select.py",
+  "tests/test_git_anchor.py",
+  "tests/test_pool_sink_wiring.py",
+  "tests/test_pool_failclosed.py",
+  "tests/test_card_doc_budget.py",
+  "docs/changelog.d/T-AG699.md",
+  "docs/traceability.d/T-AG699.toml"
+]
+depends = [
+  "E162"
+]
+risk = "medium"
+status = "pending"
+
+[[cards]]
 id = "165"
 task = "T-G265"
 title = "落档：坑总账（344 条）+ 不变量台账（77 条）"
