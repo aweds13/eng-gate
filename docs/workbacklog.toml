@@ -7498,7 +7498,7 @@ files = [
 depends = [
   "E162"
 ]
-risk = "medium"
+risk = "mid"
 status = "pending"
 
 [[cards]]
